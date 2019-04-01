@@ -3,31 +3,18 @@ jobs:
   build:
     docker:
       - image: circleci/golang:1.12.1
-    environment:
-      JVM_OPTS: -Xmx2000m
     working_directory: /go/src/k8s.io/kubernetes
     steps:
       - checkout
-#      - run: hack/update-all.sh
-#      - run: hack/verify-all.sh
-      - run:
-          name: Install bazel
-          command: |
-            echo "deb [arch=amd64] http://storage.googleapis.com/bazel-apt stable jdk1.8" | sudo tee /etc/apt/sources.list.d/bazel.list
-            curl https://bazel.build/bazel-release.pub.gpg | sudo apt-key add -
-            sudo apt-get update
-            sudo apt-get install bazel patch
-            sudo cp .circleci/bazel.rc /etc/bazel.bazelrc
-            bazel info release
-      - run: bazel build //cmd/kubectl //test/e2e:e2e.test //vendor/github.com/onsi/ginkgo/ginkgo
+      - run: make all WHAT=test/e2e/e2e.test
       - run:
           name: download dependencies
           command: |
             curl -LO https://github.com/aojea/kind/releases/download/v0.1/kind
             cp kind workspace/kind
-            cp bazel-bin/test/e2e/e2e.test workspace/e2e.test
-            maybe_kubectl="$(find "${PWD}/bazel-bin/" -name "kubectl" -type f)"
-            cp $maybe_kubectl workspace/kubectl
+            cp _output/bin/e2e.test workspace/e2e.test
+            curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
+            cp kubectl workspace/kubectl
       - persist_to_workspace:
           root: workspace
           paths:
@@ -52,7 +39,7 @@ jobs:
       - run:
           name: Create kind node-image
           command: |
-             kind build node-image --type bazel --cni calico
+             kind build node-image --type apt --cni calico
       - run:
           name: Create kind cluster
           command: |
@@ -99,7 +86,7 @@ jobs:
       - run:
           name: Create kind node-image
           command: |
-             kind build node-image --type bazel --cni calico-ipv6
+             kind build node-image --type apt --cni calico-ipv6
       - run:
           name: Create kind cluster
           command: |
