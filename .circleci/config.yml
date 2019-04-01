@@ -3,6 +3,8 @@ jobs:
   build:
     docker:
       - image: circleci/golang:1.12
+    environment:
+      JVM_OPTS: -Xmx2000m
     working_directory: /go/src/k8s.io/kubernetes
     steps:
       - checkout
@@ -15,6 +17,7 @@ jobs:
             curl https://bazel.build/bazel-release.pub.gpg | sudo apt-key add -
             sudo apt-get update
             sudo apt-get install bazel patch
+            sudo cp .circleci/bazel.rc /etc/bazel.bazelrc
             bazel info release
       - run: bazel build //cmd/kubectl //test/e2e:e2e.test //vendor/github.com/onsi/ginkgo/ginkgo
       - run:
