@@ -6,6 +6,11 @@ jobs:
     working_directory: /go/src/k8s.io/kubernetes
     steps:
       - checkout
+      - run:
+          name: Prepare environment
+          command: |
+            sudo apt-get update
+            sudo apt-get install rsync
       - run: make all WHAT=test/e2e/e2e.test
       - run:
           name: download dependencies
