@@ -11,15 +11,15 @@ jobs:
           command: |
             sudo apt-get update
             sudo apt-get install rsync
-      - run: make all WHAT=test/e2e/e2e.test
+            mkdir workspace
+      - run: make all WHAT="cmd/kubectl test/e2e/e2e.test vendor/github.com/onsi/ginkgo/ginkgo"
       - run:
-          name: download dependencies
+          name: share binaries
           command: |
             curl -LO https://github.com/aojea/kind/releases/download/v0.1/kind
             cp kind workspace/kind
             cp _output/bin/e2e.test workspace/e2e.test
-            curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
-            cp kubectl workspace/kubectl
+            cp _output/bin/kubectl workspace/kubectl
       - persist_to_workspace:
           root: workspace
           paths:
