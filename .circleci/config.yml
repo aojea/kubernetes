@@ -97,7 +97,7 @@ jobs:
           name: Run e2e tests
           no_output_timeout: 200m
           command: |
-            e2e.test --provider=local --kubeconfig=$(kind get kubeconfig-path --name="kind") --ginkgo.focus "\[Conformance\]" --ginkgo.skip "Alpha|Kubectl|\[(Disruptive|Feature:[^\]]+|Flaky)\]"
+            e2e.test --provider=local --kubeconfig=$(kind get kubeconfig-path --name="kind") --ginkgo.focus "\[sig-network\] DNS" --ginkgo.skip "Alpha|Kubectl|\[(Disruptive|Feature:[^\]]+|Flaky)\]"
       - run:
           command: |
             mkdir -p /tmp/artifacts
@@ -156,7 +156,7 @@ jobs:
             kubectl wait --timeout=60s --for condition=Ready -l run=my-google pods
             kubectl wait -n kube-system --for=condition=Ready -l k8s-app=kube-dns pods
             # Run e2e tests
-            e2e.test --provider=local --kubeconfig=$(kind get kubeconfig-path --name="kind") --ginkgo.focus "\[Conformance\]" --ginkgo.skip "Alpha|Kubectl|\[(Disruptive|Feature:[^\]]+|Flaky)\]"
+            e2e.test --provider=local --kubeconfig=$(kind get kubeconfig-path --name="kind") --ginkgo.focus "\[sig-network\] DNS" --ginkgo.skip "Alpha|Kubectl|\[(Disruptive|Feature:[^\]]+|Flaky)\]"
       - run:
           command: |
             mkdir -p /tmp/artifacts
