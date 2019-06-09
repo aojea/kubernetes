@@ -83,7 +83,7 @@ func ComponentResources(cpu string) v1.ResourceRequirements {
 func EtcdProbe(cfg *kubeadmapi.Etcd, port int, certsDir string, CACertName string, CertName string, KeyName string) *v1.Probe {
 	tlsFlags := fmt.Sprintf("--cacert=%[1]s/%[2]s --cert=%[1]s/%[3]s --key=%[1]s/%[4]s", certsDir, CACertName, CertName, KeyName)
 	// etcd pod is alive if a linearizable get succeeds.
-	cmd := fmt.Sprintf("ETCDCTL_API=3 etcdctl --endpoints=https://[%s]:%d %s get foo", GetEtcdProbeAddress(cfg), port, tlsFlags)
+	cmd := fmt.Sprintf("ETCDCTL_API=3 etcdctl --endpoints=https://[%s]:%d %s endpoint status", GetEtcdProbeAddress(cfg), port, tlsFlags)
 
 	return &v1.Probe{
 		Handler: v1.Handler{
