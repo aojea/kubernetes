@@ -76,6 +76,7 @@ var CmdNetexec = &cobra.Command{
   returns a JSON containing the fields "output" (command's output) and "error" (command's
   error message). Returns "200 OK" if the command succeeded, "417 Expectation Failed" if not.
 - "/shutdown": Closes the server with the exit code 0.
+- "/public/": Serve the files in the "/uploads" folder
 - "/upload": Accepts a file to be uploaded, writing it in the "/uploads" folder on the host.
   Returns a JSON with the fields "output" (containing the file's name on the server) and
   "error" containing any potential server side errors.`,
@@ -122,6 +123,7 @@ func startHTTPServer(httpPort int) {
 	http.HandleFunc("/upload", uploadHandler)
 	http.HandleFunc("/dial", dialHandler)
 	http.HandleFunc("/healthz", healthzHandler)
+	http.HandleFunc("/public/", publicHandler)
 	// older handlers
 	http.HandleFunc("/hostName", hostNameHandler)
 	http.HandleFunc("/shutdown", shutdownHandler)
@@ -166,6 +168,19 @@ func healthzHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusPreconditionFailed)
+}
+
+func publicHandler(w http.ResponseWriter, r *http.Request) {
+	fs := http.StripPrefix("/public/", http.FileServer(http.Dir("/uploads")))
+	w.Header().Set("Cache-Control", "private")
+	// Needed for local proxy to Kubernetes API server to work.
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Credentials", "true")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "DNT,X-Mx-ReqToken,Keep-Alive,User-Agent,X-Requested-With,Cache-Control,Content-Type")
+	// Disable If-Modified-Since so update-demo isn't broken by 304s
+	r.Header.Del("If-Modified-Since")
+	fs.ServeHTTP(w, r)
 }
 
 func shutdownHandler(w http.ResponseWriter, r *http.Request) {
