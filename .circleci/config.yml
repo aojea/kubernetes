@@ -1,0 +1,154 @@
+version: 2
+jobs:
+  build_kind:
+    docker:
+      - image: circleci/golang:1.12.6
+    working_directory: /go/src/sig.k8s.io/kind
+    steps:
+      - run:
+          name: Prepare environment
+          command: |
+            git clone https://github.com/aojea/kind .
+            git checkout dualstack
+            mkdir -p workspace/bin
+      - run: hack/update-all.sh
+      - run: hack/ci/build-all.sh
+      - run: cp /go/bin/kind workspace/bin/kind
+      - run: chmod +x workspace/bin/kind
+      - persist_to_workspace:
+          root: workspace
+          paths:
+            - bin
+  build_e2e:
+    docker:
+      - image: circleci/golang:1.12.6
+    working_directory: /go/src/k8s.io/kubernetes
+    steps:
+      - checkout
+      - run:
+          name: Prepare environment
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y rsync
+            mkdir -p workspace/bin
+            mkdir -p workspace/tests
+      - run: make all WHAT="cmd/kubectl test/e2e/e2e.test vendor/github.com/onsi/ginkgo/ginkgo"
+      - run:
+          name: share binaries
+          command: |
+            cp _output/bin/e2e.test workspace/bin/e2e.test
+            cp _output/bin/kubectl workspace/bin/kubectl
+            cp .circleci/* workspace/tests/
+      - persist_to_workspace:
+          root: workspace
+          paths:
+            - bin
+            - tests
+  build:
+    machine:
+      enabled: true
+      image: ubuntu-1604:201903-01
+      docker_layer_caching: true
+    working_directory: ~/go/src/k8s.io/kubernetes
+    steps:
+      - attach_workspace:
+          at: /tmp/workspace
+      - checkout
+      - run:
+          name: Create kind node-image
+          no_output_timeout: 40m
+          command: |
+            git --no-pager log --decorate=short --pretty=oneline -n10
+            /tmp/workspace/bin/kind build node-image --type docker --kube-root ~/go/src/k8s.io/kubernetes --loglevel debug
+            mkdir /tmp/workspace/docker
+            docker save -o /tmp/workspace/docker/kind.tar kindest/node:latest
+      - persist_to_workspace:
+          root: /tmp/workspace
+          paths:
+            - docker
+
+  e2e_dual:
+    machine:
+      enabled: true
+      image: ubuntu-1604:201903-01
+      docker_layer_caching: true
+    working_directory: ~/go/src/k8s.io/kubernetes
+    steps:
+      - attach_workspace:
+          at: /tmp/workspace
+      - run: sudo sed -i 's/^\:\:1.*/::1 localhost ip6-localhost ip6-loopback/g' /etc/hosts
+      - run:
+          name: enable ipv6
+          command: |
+            cat <<'EOF' | sudo tee /etc/docker/daemon.json
+            {
+              "ipv6": true,
+              "fixed-cidr-v6": "2001:db8:1::/64"
+            }
+            EOF
+            sudo service docker restart
+      - run:
+          name: Add fake external IPv6 address
+          command: |
+            sudo ip -6 addr add 2001:4860:4860::8888 dev docker0
+      - run:
+          name: Install dependencies
+          command: |
+            chmod +x /tmp/workspace/bin/*
+            sudo cp /tmp/workspace/bin/* /usr/local/bin/
+      - run:
+          name: Load kind node-image
+          command: |
+             docker load < /tmp/workspace/docker/kind.tar
+      - run:
+          name: Create kind cluster
+          command: |
+            kind create cluster --image kindest/node:latest --config /tmp/workspace/tests/config-dual-ci.yaml --loglevel debug --wait 1m
+            export KUBECONFIG="$(kind get kubeconfig-path --name="kind")"
+            kubectl get nodes -o wide
+            kubectl get pods --all-namespaces -o wide
+            kubectl get services --all-namespaces -o wide
+      - run:
+          name: Run e2e tests
+          no_output_timeout: 200m
+          command: |
+            export KUBECONFIG="$(kind get kubeconfig-path --name="kind")"
+            # Fake google.com
+            kubectl apply -f /tmp/workspace/tests/fake-google-com.yaml
+            kubectl wait --timeout=60s --for condition=Ready -l run=my-google pods
+            kubectl wait -n kube-system --for=condition=Ready -l k8s-app=kube-dns pods
+            # Run e2e tests
+            e2e.test --provider=local --kubeconfig=$(kind get kubeconfig-path --name="kind") --ginkgo.focus "\[sig-network\] DNS" --ginkgo.skip "Alpha|Kubectl|\[(Disruptive|Feature:[^\]]+|Flaky)\]"
+      - run:
+          command: |
+            mkdir -p /tmp/artifacts
+            kind export logs /tmp/artifacts
+      - store_artifacts:
+          path: /tmp/artifacts
+
+workflows:
+  version: 2
+  build_and_test:
+    jobs:
+      - build_kind:
+          filters:
+            branches:
+              only: /circle.*/
+      - build_e2e:
+          filters:
+            branches:
+              only: /circle.*/
+      - build:
+          requires:
+            - build_kind
+          filters:
+            branches:
+              only: /circle.*/
+      - e2e_dual:
+          requires:
+            - build
+            - build_e2e
+          filters:
+            branches:
+              only: /circle.*/
+
