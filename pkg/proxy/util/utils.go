@@ -22,14 +22,16 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/tools/record"
 	helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 	utilnet "k8s.io/utils/net"
 
+	"github.com/vishvananda/netlink"
 	"k8s.io/klog"
 )
 
@@ -270,4 +272,121 @@ func AppendPortIfNeeded(addr string, port int32) string {
 		return fmt.Sprintf("%s:%d", addr, port)
 	}
 	return fmt.Sprintf("[%s]:%d", addr, port)
+}
+
+// https://rosettacode.org/wiki/Longest_common_prefix#Go
+// lcp finds the longest common prefix of the input strings.
+// It compares by bytes instead of runes (Unicode code points).
+// It's up to the caller to do Unicode normalization if desired
+// (e.g. see golang.org/x/text/unicode/norm).
+func lcp(l []string) string {
+	// Special cases first
+	switch len(l) {
+	case 0:
+		return ""
+	case 1:
+		return l[0]
+	}
+	// LCP of min and max (lexigraphically)
+	// is the LCP of the whole set.
+	min, max := l[0], l[0]
+	for _, s := range l[1:] {
+		switch {
+		case s < min:
+			min = s
+		case s > max:
+			max = s
+		}
+	}
+	for i := 0; i < len(min) && i < len(max); i++ {
+		if min[i] != max[i] {
+			return min[:i]
+		}
+	}
+	// In the case where lengths are not equal but all bytes
+	// are equal, min is the answer ("foo" < "foobar").
+	return min
+}
+
+// LinkListByType returns two list of interfaces
+// one list with those matching the type of interface and other with
+// those interfaces with different type
+func LinkListByType(ifType string) ([]netlink.Link, []netlink.Link, error) {
+	var match, nomatch []netlink.Link
+	links, err := netlink.LinkList()
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, link := range links {
+		if link.Type() == ifType {
+			match = append(match, link)
+		} else {
+			nomatch = append(nomatch, link)
+		}
+	}
+	return match, nomatch, nil
+}
+
+// GetInternalExternalInterfaces returns two lists with interfaces names classified by internal or external.
+// Internal interfaces are those used by the pods inside the node
+// External interfaces are those used to communicate outside the node
+// The criteria to discriminate between internal and external is:
+// Internal interface:
+// - Interface type "veth"
+// - Interface Operational Status "up"
+// - Interface linked to another Network Namespace (different than 0) (IFLA_LINK_NETNSID)
+// External interface:
+// - Interface is not internal
+// - Interface has at least one route
+func GetInternalExternalInterfaces() ([]string, []string, error) {
+	var internal, external []string
+
+	vethLinks, noVethLinks, err := LinkListByType("veth")
+	if err != nil {
+		return nil, nil, fmt.Errorf("error listing all interfaces of type veth from host, error: %v", err)
+	}
+	// Obtain a list with the internal interface names
+	for _, link := range vethLinks {
+		// If it's a veth that links against another namespace and is operational
+		// we conside the interface as internal
+		if link.Attrs().NetNsID > 0 && link.Attrs().OperState.String() == "up" {
+			internal = append(internal, link.Attrs().Name)
+		} else {
+			// If is not internal there are some situations (i.e. kind) that a veth
+			// is an external interface
+			noVethLinks = append(noVethLinks, link)
+		}
+	}
+	// Obtain a list with the external interfaces names
+	for _, link := range noVethLinks {
+		routes, err := netlink.RouteList(link, netlink.FAMILY_ALL)
+		if err != nil {
+			return nil, nil, fmt.Errorf("error listing routes from interface, %v, error: %v", link.Attrs().Name, err)
+		}
+		if len(routes) > 0 && link.Attrs().OperState.String() == "up" {
+			external = append(external, link.Attrs().Name)
+		}
+	}
+	return internal, external, nil
+}
+
+// GetLeastCommonPrefixInternalInterfaces obtain the least common prefix for all internal interfaces
+// The prefix should be greater than 3 and can't overlap with any external interface
+func GetLeastCommonPrefixInternalInterfaces() (string, error) {
+	internal, external, err := GetInternalExternalInterfaces()
+	if err != nil {
+		return "", fmt.Errorf("error obtaining the list of internal and external interfaces: %v", err)
+	}
+	prefix := lcp(internal)
+	// Check that the prefix doesn't overlap with any external interface
+	for _, extIfaceName := range external {
+		if strings.HasPrefix(extIfaceName, prefix) {
+			return "", fmt.Errorf("internal interface prefix can mask traffic from external interface: %v", extIfaceName)
+		}
+	}
+	// We can consider a minimum length for the prefix to be safe
+	if len(prefix) < 4 {
+		return "", fmt.Errorf("Prefix for internal interfaces is too short: %v", prefix)
+	}
+	return prefix, nil
 }

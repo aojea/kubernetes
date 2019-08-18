@@ -318,7 +318,7 @@ func NewProxier(ipt utiliptables.Interface,
 	}
 
 	if len(clusterCIDR) == 0 {
-		klog.Warning("clusterCIDR not specified, unable to distinguish between internal and external traffic")
+		klog.Warning("clusterCIDR not specified, trying to use container interfaces prefix name to distinguish between internal and external traffic ")
 	} else if utilnet.IsIPv6CIDRString(clusterCIDR) != ipt.IsIpv6() {
 		return nil, fmt.Errorf("clusterCIDR %s has incorrect IP version: expect isIPv6=%t", clusterCIDR, ipt.IsIpv6())
 	}
@@ -771,15 +771,37 @@ func (proxier *Proxier) syncProxyRules() {
 		}
 	}
 
+	// Get Least Common Prefix name for container interfaces so we can differentiate between internal and external traffic
+	ifPrefixName, err := utilproxy.GetLeastCommonPrefixInternalInterfaces()
+	if err != nil {
+		klog.Warningf("unable to distinguish between internal and external traffic: %v ", err)
+	}
+	// Create the wildcard prefix to use with iptables
+	ifPrefixName = fmt.Sprintf("%s+", ifPrefixName)
 	// Install the kubernetes-specific postrouting rules. We use a whole chain for
 	// this so that it is easier to flush and change, for example if the mark
 	// value should ever change.
-	writeLine(proxier.natRules, []string{
-		"-A", string(kubePostroutingChain),
-		"-m", "comment", "--comment", `"kubernetes service traffic requiring SNAT"`,
-		"-m", "mark", "--mark", proxier.masqueradeMark,
-		"-j", "MASQUERADE",
-	}...)
+	// https://github.com/kubernetes/kubernetes/issues/79866#issuecomment-519218155
+	// 1) Traffic from pods on "this" node to a service ClusterIP never needs MASQ
+	// 2) Traffic from "other" machines to a service ClusterIP routed "through" this node might need MASQ.
+	// 2a) Traffic from "other" machines to a service ClusterIP routed "through" this node to a backend NOT ON this node always needs MASQ.
+	// 2b) Traffic from "other" machines to a service ClusterIP routed "through" this node to a backend ON this node never needs MASQ.
+	if len(proxier.clusterCIDR) == 0 && len(ifPrefixName) > 0 {
+		writeLine(proxier.natRules, []string{
+			"-A", string(kubePostroutingChain),
+			"! -o", ifPrefixName,
+			"-m", "comment", "--comment", `"kubernetes service traffic requiring SNAT"`,
+			"-m", "mark", "--mark", proxier.masqueradeMark,
+			"-j", "MASQUERADE",
+		}...)
+	} else {
+		writeLine(proxier.natRules, []string{
+			"-A", string(kubePostroutingChain),
+			"-m", "comment", "--comment", `"kubernetes service traffic requiring SNAT"`,
+			"-m", "mark", "--mark", proxier.masqueradeMark,
+			"-j", "MASQUERADE",
+		}...)
+	}
 
 	// Install the kubernetes-specific masquerade mark rule. We use a whole chain for
 	// this so that it is easier to flush and change, for example if the mark
@@ -868,6 +890,8 @@ func (proxier *Proxier) syncProxyRules() {
 				// for you.  Since that might bounce off-node, we masquerade here.
 				// If/when we support "Local" policy for VIPs, we should update this.
 				writeLine(proxier.natRules, append(args, "! -s", proxier.clusterCIDR, "-j", string(KubeMarkMasqChain))...)
+			} else if len(ifPrefixName) > 0 {
+				writeLine(proxier.natRules, append(args, "! -i", ifPrefixName, "-j", string(KubeMarkMasqChain))...)
 			}
 			writeLine(proxier.natRules, append(args, "-j", string(svcChain))...)
 		} else {
