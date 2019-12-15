@@ -511,7 +511,6 @@ func TestMultiMasterNodePortAllocation(t *testing.T) {
 
 		// verify kube API servers have registered and create a client
 		if err := wait.PollImmediate(3*time.Second, 2*time.Minute, func() (bool, error) {
-			t.Logf("creating client: %d", i)
 			client, err := kubernetes.NewForConfig(kubeAPIServers[i].ClientConfig)
 			if err != nil {
 				t.Logf("create client error: %v", err)
@@ -551,30 +550,30 @@ func TestMultiMasterNodePortAllocation(t *testing.T) {
 
 	// create and delete a nodePort service using different APIservers
 	// to check that API servers are syncing the data with etcd
-	for i := 0; i < 100; i++ {
-		t.Logf("creating and deleting service, attempt: %d", i)
-		// Create the service using the first API server
-		_, err := clientAPIServers[0].CoreV1().Services(metav1.NamespaceDefault).Create(serviceObject)
-		if err != nil {
-			t.Fatalf("unable to create service: %v", err)
-		}
-
-		// Delete the service using the first API server
-		if err := clientAPIServers[0].CoreV1().Services(metav1.NamespaceDefault).Delete(serviceObject.ObjectMeta.Name, nil); err != nil {
-			t.Fatalf("got unexpected error: %v", err)
-		}
-
-		// Create the service using the second API server
-		_, err = clientAPIServers[1].CoreV1().Services(metav1.NamespaceDefault).Create(serviceObject)
-		if err != nil {
-			t.Fatalf("unable to create service: %v", err)
-		}
-
-		// Delete the service using the second API server
-		if err := clientAPIServers[1].CoreV1().Services(metav1.NamespaceDefault).Delete(serviceObject.ObjectMeta.Name, nil); err != nil {
-			t.Fatalf("got unexpected error: %v", err)
-		}
+	// for i := 0; i < 100; i++ {
+	// t.Logf("creating and deleting service, attempt: %d", i)
+	// Create the service using the first API server
+	_, err := clientAPIServers[0].CoreV1().Services(metav1.NamespaceDefault).Create(serviceObject)
+	if err != nil {
+		t.Fatalf("unable to create service: %v", err)
 	}
+
+	// Delete the service using the first API server
+	if err := clientAPIServers[1].CoreV1().Services(metav1.NamespaceDefault).Delete(serviceObject.ObjectMeta.Name, nil); err != nil {
+		t.Fatalf("got unexpected error: %v", err)
+	}
+
+	// Create the service using the second API server
+	_, err = clientAPIServers[0].CoreV1().Services(metav1.NamespaceDefault).Create(serviceObject)
+	if err != nil {
+		t.Fatalf("unable to create service: %v", err)
+	}
+
+	// Delete the service using the second API server
+	if err := clientAPIServers[1].CoreV1().Services(metav1.NamespaceDefault).Delete(serviceObject.ObjectMeta.Name, nil); err != nil {
+		t.Fatalf("got unexpected error: %v", err)
+	}
+	//}
 
 	time.Sleep(3 * time.Second)
 

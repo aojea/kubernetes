@@ -113,6 +113,7 @@ func (r *PortAllocator) Used() int {
 // or has already been reserved.  ErrFull will be returned if there
 // are no ports left.
 func (r *PortAllocator) Allocate(port int) error {
+	klog.Infof("Allocating port %d", port)
 	ok, offset := r.contains(port)
 	if !ok {
 		// include valid port range in error
