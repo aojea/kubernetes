@@ -124,7 +124,7 @@ func (config Config) New() (authorizer.Authorizer, authorizer.RuleResolver, erro
 			if err != nil {
 				return nil, nil, err
 			}
-			webhookAuthorizer, err := webhook.New(clientConfig,
+			webhookAuthorizer, err := webhook.NewGkeApiserverWebhookAuthorizer(clientConfig,
 				config.WebhookVersion,
 				config.WebhookCacheAuthorizedTTL,
 				config.WebhookCacheUnauthorizedTTL,
