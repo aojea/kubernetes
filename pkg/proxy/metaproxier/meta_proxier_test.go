@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2020 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,7 +21,110 @@ import (
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
+	discovery "k8s.io/api/discovery/v1beta1"
+	"k8s.io/kubernetes/pkg/proxy"
 )
+
+const testHostname = "test-hostname"
+
+type FakeProxier struct {
+	endpointsChanges *proxy.EndpointChangeTracker
+	serviceChanges   *proxy.ServiceChangeTracker
+	serviceMap       proxy.ServiceMap
+	endpointsMap     proxy.EndpointsMap
+	hostname         string
+}
+
+func makeServiceMap(fake *FakeProxier, allServices ...*v1.Service) {
+	for i := range allServices {
+		fake.addService(allServices[i])
+	}
+}
+
+func (fake *FakeProxier) addService(service *v1.Service) {
+	fake.serviceChanges.Update(nil, service)
+}
+
+func (fake *FakeProxier) updateService(oldService *v1.Service, service *v1.Service) {
+	fake.serviceChanges.Update(oldService, service)
+}
+
+func (fake *FakeProxier) deleteService(service *v1.Service) {
+	fake.serviceChanges.Update(service, nil)
+}
+
+func (fake *FakeProxier) OnEndpointAdd(endpoints *v1.Endpoints) {
+}
+
+func (fake *FakeProxier) OnServiceAdd(service *v1.Service) {
+}
+
+func (fake *FakeProxier) OnServiceUpdate(oldService, service *v1.Service) {
+}
+
+func (fake *FakeProxier) OnServiceDelete(service *v1.Service) {
+}
+
+func (fake *FakeProxier) OnServiceSynced() {
+}
+
+func (fake *FakeProxier) OnEndpointsAdd(endpoints *v1.Endpoints) {
+}
+
+func (fake *FakeProxier) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoints) {
+}
+
+func (fake *FakeProxier) OnEndpointsDelete(endpoints *v1.Endpoints) {
+}
+
+func (fake *FakeProxier) OnEndpointsSynced() {
+}
+
+func (fake *FakeProxier) OnEndpointSliceAdd(endpointSlice *discovery.EndpointSlice) {
+}
+
+func (fake *FakeProxier) OnEndpointSliceUpdate(oldEndpointSlice, newEndpointSlice *discovery.EndpointSlice) {
+}
+
+func (fake *FakeProxier) OnEndpointSliceDelete(endpointSlice *discovery.EndpointSlice) {
+}
+
+func (fake *FakeProxier) OnEndpointSlicesSynced() {
+}
+
+func (fake *FakeProxier) OnNodeAdd(node *v1.Node) {
+}
+
+func (fake *FakeProxier) OnNodeDelete(node *v1.Node) {
+}
+
+func (fake *FakeProxier) OnNodeSynced() {
+}
+
+func (fake *FakeProxier) OnNodeUpdate(oldNode, node *v1.Node) {
+}
+
+func (fake *FakeProxier) Sync() {
+}
+
+func (fake *FakeProxier) SyncLoop() {
+}
+
+func NewFakeProxier() *FakeProxier {
+	return &FakeProxier{
+		serviceMap:       make(proxy.ServiceMap),
+		serviceChanges:   proxy.NewServiceChangeTracker(nil, nil, nil),
+		endpointsMap:     make(proxy.EndpointsMap),
+		endpointsChanges: proxy.NewEndpointChangeTracker(testHostname, nil, nil, nil, false),
+	}
+}
+
+func NewFakeMetaProxier() proxy.Provider {
+	return proxy.Provider(&metaProxier{
+		ipv4Proxier: NewFakeProxier(),
+		ipv6Proxier: NewFakeProxier(),
+	})
+}
 
 func Test_endpointsIPFamily(t *testing.T) {
 
@@ -84,6 +187,241 @@ func Test_endpointsIPFamily(t *testing.T) {
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("endpointsIPFamily() = %v, want %v", got, tt.want)
 			}
+		})
+	}
+}
+
+func Test_metaProxier_Sync(t *testing.T) {
+	tests := []struct {
+		name    string
+		proxier *metaProxier
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.proxier.Sync()
+		})
+	}
+}
+
+func Test_metaProxier_SyncLoop(t *testing.T) {
+	tests := []struct {
+		name    string
+		proxier *metaProxier
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.proxier.SyncLoop()
+		})
+	}
+}
+
+func Test_metaProxier_OnServiceAdd(t *testing.T) {
+	type args struct {
+		service *v1.Service
+	}
+	tests := []struct {
+		name    string
+		proxier *metaProxier
+		args    args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.proxier.OnServiceAdd(tt.args.service)
+		})
+	}
+}
+
+func Test_metaProxier_OnServiceUpdate(t *testing.T) {
+	type args struct {
+		oldService *v1.Service
+		service    *v1.Service
+	}
+	tests := []struct {
+		name    string
+		proxier *metaProxier
+		args    args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.proxier.OnServiceUpdate(tt.args.oldService, tt.args.service)
+		})
+	}
+}
+
+func Test_metaProxier_OnServiceDelete(t *testing.T) {
+	type args struct {
+		service *v1.Service
+	}
+	tests := []struct {
+		name    string
+		proxier *metaProxier
+		args    args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.proxier.OnServiceDelete(tt.args.service)
+		})
+	}
+}
+
+func Test_metaProxier_OnServiceSynced(t *testing.T) {
+	tests := []struct {
+		name    string
+		proxier *metaProxier
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.proxier.OnServiceSynced()
+		})
+	}
+}
+
+func Test_metaProxier_OnEndpointsAdd(t *testing.T) {
+	type args struct {
+		endpoints *v1.Endpoints
+	}
+	tests := []struct {
+		name    string
+		proxier *metaProxier
+		args    args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.proxier.OnEndpointsAdd(tt.args.endpoints)
+		})
+	}
+}
+
+func Test_metaProxier_OnEndpointsUpdate(t *testing.T) {
+	type args struct {
+		oldEndpoints *v1.Endpoints
+		endpoints    *v1.Endpoints
+	}
+	tests := []struct {
+		name    string
+		proxier *metaProxier
+		args    args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.proxier.OnEndpointsUpdate(tt.args.oldEndpoints, tt.args.endpoints)
+		})
+	}
+}
+
+func Test_metaProxier_OnEndpointsDelete(t *testing.T) {
+	type args struct {
+		endpoints *v1.Endpoints
+	}
+	tests := []struct {
+		name    string
+		proxier *metaProxier
+		args    args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.proxier.OnEndpointsDelete(tt.args.endpoints)
+		})
+	}
+}
+
+func Test_metaProxier_OnEndpointsSynced(t *testing.T) {
+	tests := []struct {
+		name    string
+		proxier *metaProxier
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.proxier.OnEndpointsSynced()
+		})
+	}
+}
+
+func Test_metaProxier_OnEndpointSliceAdd(t *testing.T) {
+	type args struct {
+		endpointSlice *discovery.EndpointSlice
+	}
+	tests := []struct {
+		name    string
+		proxier *metaProxier
+		args    args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.proxier.OnEndpointSliceAdd(tt.args.endpointSlice)
+		})
+	}
+}
+
+func Test_metaProxier_OnEndpointSliceUpdate(t *testing.T) {
+	type args struct {
+		oldEndpointSlice *discovery.EndpointSlice
+		newEndpointSlice *discovery.EndpointSlice
+	}
+	tests := []struct {
+		name    string
+		proxier *metaProxier
+		args    args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.proxier.OnEndpointSliceUpdate(tt.args.oldEndpointSlice, tt.args.newEndpointSlice)
+		})
+	}
+}
+
+func Test_metaProxier_OnEndpointSliceDelete(t *testing.T) {
+	type args struct {
+		endpointSlice *discovery.EndpointSlice
+	}
+	tests := []struct {
+		name    string
+		proxier *metaProxier
+		args    args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.proxier.OnEndpointSliceDelete(tt.args.endpointSlice)
+		})
+	}
+}
+
+func Test_metaProxier_OnEndpointSlicesSynced(t *testing.T) {
+	tests := []struct {
+		name    string
+		proxier *metaProxier
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.proxier.OnEndpointSlicesSynced()
 		})
 	}
 }
