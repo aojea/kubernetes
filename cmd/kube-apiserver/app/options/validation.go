@@ -35,8 +35,6 @@ import (
 // validateClusterIPFlags is expected to be called after Complete()
 func validateClusterIPFlags(options *ServerRunOptions) []error {
 	var errs []error
-	// maxCIDRBits is used to define the maximum CIDR size for the cluster ip(s)
-	const maxCIDRBits = 20
 
 	// validate that primary has been processed by user provided values or it has been defaulted
 	if options.PrimaryServiceClusterIPRange.IP == nil {
@@ -50,7 +48,7 @@ func validateClusterIPFlags(options *ServerRunOptions) []error {
 
 	// Complete() expected to have set Primary* and Secondary*
 	// primary CIDR validation
-	if err := validateMaxCIDRRange(options.PrimaryServiceClusterIPRange, maxCIDRBits, "--service-cluster-ip-range"); err != nil {
+	if err := validateMaxCIDRRange(options.PrimaryServiceClusterIPRange, "--service-cluster-ip-range"); err != nil {
 		errs = append(errs, err)
 	}
 
@@ -75,7 +73,7 @@ func validateClusterIPFlags(options *ServerRunOptions) []error {
 			errs = append(errs, errors.New("--service-cluster-ip-range and --secondary-service-cluster-ip-range must be of different IP family"))
 		}
 
-		if err := validateMaxCIDRRange(options.SecondaryServiceClusterIPRange, maxCIDRBits, "--secondary-service-cluster-ip-range"); err != nil {
+		if err := validateMaxCIDRRange(options.SecondaryServiceClusterIPRange, "--secondary-service-cluster-ip-range"); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -83,11 +81,22 @@ func validateClusterIPFlags(options *ServerRunOptions) []error {
 	return errs
 }
 
-func validateMaxCIDRRange(cidr net.IPNet, maxCIDRBits int, cidrFlag string) error {
+func validateMaxCIDRRange(cidr net.IPNet, cidrFlag string) error {
+	// maxIPv4CIDRBits and maxIPv6CIDRBits are used to define the maximum CIDR size for the cluster ip(s)
+	// For IPv6, we historically allowed /108 or greater (20 bits), but only used at most 16 bits of it.
+	// Now we allow using exactly /64, for consistency with other IPv6 subnets, but we still only use 16 bits of it
+	// for the allocator.
+	const maxIPv4CIDRBits = 20
+	const maxIPv6CIDRBits = 64
 	// Should be smallish sized cidr, this thing is kept in etcd
 	// bigger cidr (specially those offered by IPv6) will add no value
 	// significantly increase snapshotting time.
 	var ones, bits = cidr.Mask.Size()
+	maxCIDRBits := maxIPv4CIDRBits
+	if ones == 128 {
+		maxCIDRBits = maxIPv6CIDRBits
+	}
+
 	if bits-ones > maxCIDRBits {
 		return fmt.Errorf("specified %s is too large; for %d-bit addresses, the mask must be >= %d", cidrFlag, bits, bits-maxCIDRBits)
 	}
