@@ -362,6 +362,7 @@ func (m *Map) AllocateNext() (*net.IPNet, error) {
 			m.used[candidate] = true
 			m.nextCandidate = (candidate + 1) % m.maxCIDRs
 			cidr := &net.IPNet{IP: m.addIPOffset(candidate), Mask: m.nodeMask}
+			fmt.Println("AllocateNext", candidate, cidr, cidr.IP, cidr.Mask)
 			return cidr, nil
 		}
 
@@ -382,7 +383,7 @@ func (m *Map) validate(cidr *net.IPNet) error {
 // net.IP
 func (m *Map) addIPOffset(offset uint64) net.IP {
 	base := big.NewInt(0).SetBytes(m.clusterCIDR.IP.To16())
-	return net.IP(big.NewInt(0).Add(base, big.NewInt(int64(offset))).Bytes())
+	return net.IP(base.Add(base, big.NewInt(int64(offset))).Bytes())
 }
 
 // calculateIPOffset calculates the integer offset of ip from base such that
