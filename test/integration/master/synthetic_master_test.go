@@ -44,10 +44,13 @@ import (
 	"k8s.io/apiserver/pkg/authentication/user"
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 	"k8s.io/apiserver/pkg/authorization/authorizerfactory"
+	"k8s.io/apiserver/pkg/registry/generic/registry"
 	"k8s.io/apiserver/plugin/pkg/authenticator/token/tokentest"
+	"k8s.io/client-go/kubernetes"
 	clientset "k8s.io/client-go/kubernetes"
 	clienttypedv1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	restclient "k8s.io/client-go/rest"
+	kubeapiservertesting "k8s.io/kubernetes/cmd/kube-apiserver/app/testing"
 	"k8s.io/kubernetes/pkg/master"
 	"k8s.io/kubernetes/test/integration"
 	"k8s.io/kubernetes/test/integration/framework"
@@ -863,4 +866,115 @@ func TestUpdateNodeObjects(t *testing.T) {
 		}(j)
 	}
 	wg.Wait()
+}
+
+// TestServiceOufOfAllocator test that we can create services with ClusterIP out of the ipallocator range
+func TestServiceOufOfAllocator(t *testing.T) {
+	var testcases = []struct {
+		name        string
+		serviceCIDR string
+		clusterIP   string
+	}{
+		{
+			name:        "Single Stack IPv4 and ClusterIP in allocator",
+			serviceCIDR: "10.0.0.0/12",
+			clusterIP:   "10.0.2.2",
+		},
+		{
+			name:        "Single Stack IPv6 and ClusterIP in allocator",
+			serviceCIDR: "2001:db8:1::/64",
+			clusterIP:   "2001:db8:1::ac",
+		},
+		{
+			name:        "Single Stack IPv4 and ClusterIP out of the allocator",
+			serviceCIDR: "10.0.0.0/12",
+			clusterIP:   "10.12.255.252",
+		},
+		{
+			name:        "Single Stack IPv6 and ClusterIP out of the allocator",
+			serviceCIDR: "2001:db8:1::/64",
+			clusterIP:   "2001:db8:1::ff:ff:ac",
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+		t.Run(fmt.Sprintf("%s", tc.name), func(t *testing.T) {
+
+			etcd := framework.SharedEtcd()
+			// cleanup the registry storage
+			defer registry.CleanupStorage()
+			// start a kube-apiserver
+			server := kubeapiservertesting.StartTestServerOrDie(t, nil, []string{
+				"--service-cluster-ip-range", tc.serviceCIDR,
+				"--advertise-address", "10.0.0.1",
+				// "--feature-gates", fmt.Sprintf("IPv6DualStack=%t", tc.dualStack),
+			}, etcd)
+			defer server.TearDownFn()
+			// create a client
+			client, err := kubernetes.NewForConfig(server.ClientConfig)
+			if err != nil {
+				t.Errorf("error creating client: %v", err)
+			}
+
+			// Wait until the default "kubernetes" service is created.
+			if err = wait.Poll(250*time.Millisecond, time.Minute, func() (bool, error) {
+				_, err := client.CoreV1().Services(metav1.NamespaceDefault).Get(context.TODO(), "kubernetes", metav1.GetOptions{})
+				if err != nil && !apierrors.IsNotFound(err) {
+					return false, err
+				}
+				return !apierrors.IsNotFound(err), nil
+			}); err != nil {
+				t.Fatalf("creating kubernetes service timed out")
+			}
+
+			// Create 2 services with the same ClusterIP
+			svc1 := &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "svc-cluster-ip",
+				},
+				Spec: corev1.ServiceSpec{
+					Type: corev1.ServiceTypeClusterIP,
+					Ports: []corev1.ServicePort{
+						{Port: 80},
+					},
+					ClusterIP: tc.clusterIP,
+				},
+			}
+
+			svc2 := &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "svc-dup-cluster-ip",
+				},
+				Spec: corev1.ServiceSpec{
+					Type: corev1.ServiceTypeClusterIP,
+					Ports: []corev1.ServicePort{
+						{Port: 80},
+					},
+					ClusterIP: tc.clusterIP,
+				},
+			}
+
+			// create service with ClusterIP set
+			if _, err := client.CoreV1().Services(metav1.NamespaceDefault).Create(context.TODO(), svc1, metav1.CreateOptions{}); err != nil {
+				t.Fatalf("unexpected error creating service: %v", err)
+			}
+
+			// Create another service with the same ClusterIP. It will fail because it is a duplicate IP
+			if _, err := client.CoreV1().Services(metav1.NamespaceDefault).Create(context.TODO(), svc2, metav1.CreateOptions{}); err == nil {
+				t.Fatalf("different services with same ClusterIP are not allowed")
+			} else if !strings.Contains(err.Error(), "provided IP is already allocated") {
+				t.Fatalf("unexpected error text: %v", err)
+			}
+			// Delete the first service.
+			if err := client.CoreV1().Services(metav1.NamespaceDefault).Delete(context.TODO(), svc1.ObjectMeta.Name, metav1.DeleteOptions{}); err != nil {
+				t.Fatalf("got unexpected error: %v", err)
+			}
+
+			// This time creating the second service should work.
+			if _, err := client.CoreV1().Services(metav1.NamespaceDefault).Create(context.TODO(), svc2, metav1.CreateOptions{}); err != nil {
+				t.Fatalf("got unexpected error: %v", err)
+			}
+		})
+	}
 }
