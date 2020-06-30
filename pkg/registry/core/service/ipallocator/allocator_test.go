@@ -31,7 +31,7 @@ func TestAllocate(t *testing.T) {
 		free             int
 		released         string
 		outOfRange       []string
-		alreadyAllocated string
+		alreadyAllocated []string
 	}{
 		{
 			name:     "IPv4",
@@ -44,20 +44,24 @@ func TestAllocate(t *testing.T) {
 				"192.168.1.255", // reserved (broadcast address)
 				"192.168.2.2",   // not in 192.168.1.0/24
 			},
-			alreadyAllocated: "192.168.1.1",
+			alreadyAllocated: []string{
+				"192.168.1.1",
+			},
 		},
 		{
 			name:     "IPv6",
 			cidr:     "2001:db8:1::/48",
-			free:     65535,
+			free:     maxAllocatorSize,
 			released: "2001:db8:1::5",
 			outOfRange: []string{
-				"2001:db8::1",     // not in 2001:db8:1::/48
-				"2001:db8:1::",    // reserved (base address)
-				"2001:db8:1::1:0", // not in the low 16 bits of 2001:db8:1::/48
-				"2001:db8:2::2",   // not in 2001:db8:1::/48
+				"2001:db8::1",   // not in 2001:db8:1::/48
+				"2001:db8:1::",  // reserved (base address)
+				"2001:db8:2::2", // not in 2001:db8:1::/48
 			},
-			alreadyAllocated: "2001:db8:1::1",
+			alreadyAllocated: []string{
+				"2001:db8:1::1",
+				"2001:db8:1::a0:0", // duplicate "2001:db8:1::1" + 2^20
+			},
 		},
 	}
 	for _, tc := range testCases {
@@ -126,12 +130,16 @@ func TestAllocate(t *testing.T) {
 		for _, outOfRange := range tc.outOfRange {
 			err = r.Allocate(net.ParseIP(outOfRange))
 			if _, ok := err.(*ErrNotInRange); !ok {
-				t.Fatal(err)
+				t.Fatalf("Error allocating %s: %v", outOfRange, err)
 			}
 		}
-		if err := r.Allocate(net.ParseIP(tc.alreadyAllocated)); err != ErrAllocated {
-			t.Fatal(err)
+		for _, alreadyAllocated := range tc.alreadyAllocated {
+			err = r.Allocate(net.ParseIP(alreadyAllocated))
+			if err != ErrAllocated {
+				t.Fatalf("Error allocating %s: %v", alreadyAllocated, err)
+			}
 		}
+
 		if f := r.Free(); f != 1 {
 			t.Errorf("Test %s unexpected free %d", tc.name, f)
 		}

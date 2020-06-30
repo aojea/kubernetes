@@ -40,6 +40,10 @@ type Interface interface {
 	Has(ip net.IP) bool
 }
 
+// maxAllocatorSize is the maximum size in bits allowed for the allocator
+// Use 2^20 bits as maximum for legacy reasons
+const maxAllocatorSize = 1048576
+
 var (
 	ErrFull              = errors.New("range is full")
 	ErrAllocated         = errors.New("provided IP is already allocated")
@@ -86,12 +90,7 @@ func NewAllocatorCIDRRange(cidr *net.IPNet, allocatorFactory allocator.Allocator
 	base := utilnet.BigForIP(cidr.IP)
 	rangeSpec := cidr.String()
 
-	if utilnet.IsIPv6CIDR(cidr) {
-		// Limit the max size, since the allocator keeps a bitmap of that size.
-		if max > 65536 {
-			max = 65536
-		}
-	} else {
+	if !utilnet.IsIPv6CIDR(cidr) {
 		// Don't use the IPv4 network's broadcast address.
 		max--
 	}
@@ -99,6 +98,11 @@ func NewAllocatorCIDRRange(cidr *net.IPNet, allocatorFactory allocator.Allocator
 	// Don't use the network's ".0" address.
 	base.Add(base, big.NewInt(1))
 	max--
+
+	// Limit the max size, since the allocator keeps a bitmap of that size.
+	if max > maxAllocatorSize {
+		max = maxAllocatorSize
+	}
 
 	r := Range{
 		net:  cidr,
@@ -249,16 +253,21 @@ func (r *Range) Restore(net *net.IPNet, data []byte) error {
 
 // contains returns true and the offset if the ip is in the range, and false
 // and nil otherwise. The first and last addresses of the CIDR are omitted.
+// Because the CIDR range can be greater than the size of the allocator,
+// the offset is the mod value with the size of the allocator.
 func (r *Range) contains(ip net.IP) (bool, int) {
 	if !r.net.Contains(ip) {
 		return false, 0
 	}
 
 	offset := calculateIPOffset(r.base, ip)
-	if offset < 0 || offset >= r.max {
+	// we allow offsets outside of the allocator size
+	// if the subnet size is bigger
+	if offset < 0 || (r.max < maxAllocatorSize && offset >= r.max) {
 		return false, 0
 	}
-	return true, offset
+
+	return true, (offset % r.max)
 }
 
 // calculateIPOffset calculates the integer offset of ip from base such that
