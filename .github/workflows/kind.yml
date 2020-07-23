@@ -63,4 +63,4 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: kind-logs-${{ env.JOB_NAME }}-${{ github.run_id }}
-        path: ${{ env.ARTIFACTS }}/
+        path: ./k8s.io/kubernetes/_artifacts/
