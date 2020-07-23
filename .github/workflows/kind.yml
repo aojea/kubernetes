@@ -12,7 +12,7 @@ on:
         required: true
       e2e_focus:
         description: 'e2e FOCUS regex'
-        default: '[Conformance]'
+        default: "\\[Conformance\\]"
         required: true
       e2e_skip:
         description: 'e2e SKIP regex'
