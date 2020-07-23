@@ -60,15 +60,10 @@ jobs:
 
     - name: Generate Report
       id: xunit-viewer
+      if: always()
       uses: AutoModality/action-xunit-viewer@v1
       with:
         results: ./src/k8s.io/kubernetes/_artifacts/
-
-    - name: Attach the report
-      uses: actions/upload-artifact@v1
-      with:
-        name: test-results
-        path: ./src/k8s.io/kubernetes/_artifacts/
 
     - name: Upload logs
       if: always()
