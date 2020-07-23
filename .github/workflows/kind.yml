@@ -1,0 +1,66 @@
+name: Kind workflow
+on:
+  workflow_dispatch:
+    inputs:
+      kind_url:
+        description: 'URL to download kind https://github.com/kubernetes-sigs/kind/releases/'
+        default: 'https://github.com/kubernetes-sigs/kind/releases/download/v0.8.1/kind-linux-amd64'
+        required: true
+      go_version:
+        description: 'Golang version'
+        default: '1.14.4'
+        required: true
+      e2e_focus:
+        description: 'e2e FOCUS regex'
+        default: '[Conformance]'
+        required: true
+      e2e_skip:
+        description: 'e2e SKIP regex'
+        default: '[Slow]|[Disruptive]|[Flaky]|[Feature:.+]'
+        required: true
+      e2e_parallel:
+        description: 'e2e run in PARALLEL'
+        default: 'true'
+        required: true
+        
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    env:
+      GOPROXY: "https://proxy.golang.org"
+      GOPATH: ${{ github.workspace }}
+      FOCUS: "${{ github.event.inputs.e2e_focus }}"
+      SKIP: "${{ github.event.inputs.e2e_skip }}"
+      PARALLEL: "${{ github.event.inputs.e2e_parallel }}"
+      BUILD_TYPE: "make"
+
+    steps:
+    - name: Set up Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: ${{ github.event.inputs.go_version }}
+
+    - name: Check out code
+      uses: actions/checkout@v2
+      with:
+        path: ./src/k8s.io/kubernetes
+        fetch-depth: 0
+      
+    - name: Install KIND
+      run: |
+        sudo curl -Lo /usr/local/bin/kind ${{ github.event.inputs.kind_url }}
+        sudo chmod +x /usr/local/bin/kind
+            
+    - name: Run e2e tests
+      run: |
+        sudo curl -Lo e2e-k8s.sh https://raw.githubusercontent.com/kubernetes-sigs/kind/v0.8.1/hack/ci/e2e-k8s.sh
+        sudo chmod +x e2e-k8s.sh
+        ./e2e-k8s.sh
+      working-directory: ./src/k8s.io/kubernetes
+        
+    - name: Upload logs
+      if: always()
+      uses: actions/upload-artifact@v2
+      with:
+        name: kind-logs-${{ env.JOB_NAME }}-${{ github.run_id }}
+        path: ${{ env.ARTIFACTS }}/
