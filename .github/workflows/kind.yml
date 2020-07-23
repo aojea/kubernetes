@@ -16,7 +16,7 @@ on:
         required: true
       e2e_skip:
         description: 'e2e SKIP regex'
-        default: '[Slow]|[Disruptive]|[Flaky]|[Feature:.+]'
+        default: "\\[Slow\\]|\\[Disruptive\\]|\\[Flaky\\]|\\[Feature:.+\\]"
         required: true
       e2e_parallel:
         description: 'e2e run in PARALLEL'
