@@ -57,7 +57,19 @@ jobs:
         sudo chmod +x e2e-k8s.sh
         ./e2e-k8s.sh
       working-directory: ./src/k8s.io/kubernetes
-        
+
+    - name: Generate Report
+      id: xunit-viewer
+      uses: AutoModality/action-xunit-viewer@v1
+      with:
+        results: ./src/k8s.io/kubernetes/_artifacts/
+
+    - name: Attach the report
+      uses: actions/upload-artifact@v1
+      with:
+        name: test-results
+        path: ./src/k8s.io/kubernetes/_artifacts/
+
     - name: Upload logs
       if: always()
       uses: actions/upload-artifact@v2
