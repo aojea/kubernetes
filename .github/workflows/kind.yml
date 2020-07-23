@@ -65,6 +65,13 @@ jobs:
       with:
         results: ./src/k8s.io/kubernetes/_artifacts/
 
+    - name: Upload test report
+      if: always()
+      uses: actions/upload-artifact@v2
+      with:
+        name: kind-logs-${{ env.JOB_NAME }}-${{ github.run_id }}
+        path: ./src/k8s.io/kubernetes/_artifacts/*.html
+
     - name: Upload logs
       if: always()
       uses: actions/upload-artifact@v2
