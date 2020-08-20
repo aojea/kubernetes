@@ -23,6 +23,7 @@ import (
 
 	"k8s.io/klog/v2"
 	auditproxy "k8s.io/kubernetes/test/images/agnhost/audit-proxy"
+	badtcpseqserver "k8s.io/kubernetes/test/images/agnhost/bad-tcp-seq-server"
 	"k8s.io/kubernetes/test/images/agnhost/connect"
 	crdconvwebhook "k8s.io/kubernetes/test/images/agnhost/crd-conversion-webhook"
 	"k8s.io/kubernetes/test/images/agnhost/dns"
@@ -51,7 +52,7 @@ import (
 func main() {
 	rootCmd := &cobra.Command{
 		Use:     "app",
-		Version: "2.24",
+		Version: "2.25",
 	}
 
 	rootCmd.AddCommand(auditproxy.CmdAuditProxy)
@@ -77,6 +78,7 @@ func main() {
 	rootCmd.AddCommand(portforwardtester.CmdPortForwardTester)
 	rootCmd.AddCommand(resconsumerctrl.CmdResourceConsumerController)
 	rootCmd.AddCommand(servehostname.CmdServeHostname)
+	rootCmd.AddCommand(badtcpseqserver.CmdBadTCPSeqServer)
 	rootCmd.AddCommand(testwebserver.CmdTestWebserver)
 	rootCmd.AddCommand(webhook.CmdWebhook)
 	rootCmd.AddCommand(openidmetadata.CmdTestServiceAccountIssuerDiscovery)

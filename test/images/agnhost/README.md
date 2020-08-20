@@ -627,6 +627,17 @@ Usage:
     kubectl exec test-agnhost -- /agnhost test-webserver [--port <port>]
 ```
 
+### bad-tcp-seq-server
+
+Starts a tcp server on the specified port and, once a session is established,
+injects a crafted TCP packet with a wrong sequence number.
+
+xref: https://github.com/kubernetes/kubernetes/issues/74839
+
+
+```console
+  kubectl exec test-agnhost -- /agnhost bad-tcp-seq-server [--port <port>]
+```
 
 ### webhook (Kubernetes External Admission Webhook)
 
