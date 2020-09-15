@@ -188,10 +188,10 @@ var _ = SIGDescribe("Networking", func() {
 			config.DialFromTestContainer("http", config.NodeIP, config.NodeHTTPPort, config.MaxTries, 0, config.EndpointHostnames())
 		})
 
-		ginkgo.It("should function for pod-Service(hostNetwork): udp", func() {
+		ginkgo.It("should function for pod-Service(hostNetwork) but not in the same node: udp", func() {
 			config := e2enetwork.NewHostNetworkingTestConfig(f, false, 11)
 			ginkgo.By(fmt.Sprintf("dialing(udp) %v --> %v:%v (config.clusterIP)", config.TestContainerPod.Name, config.ClusterIP, e2enetwork.ClusterUDPPort))
-			config.DialFromTestContainer("udp", config.ClusterIP, e2enetwork.ClusterUDPPort, config.MaxTries, 0, config.EndpointHostnames())
+			config.DialFromTestContainer("udp", config.ClusterIP, e2enetwork.ClusterUDPPort, config.MaxTries, 0, config.EndpointHostnames().Delete(config.TestContainerPod.Spec.NodeSelector["kubernetes.io/hostname"]))
 
 			ginkgo.By(fmt.Sprintf("dialing(udp) %v --> %v:%v (nodeIP)", config.TestContainerPod.Name, config.NodeIP, config.NodeUDPPort))
 			config.DialFromTestContainer("udp", config.NodeIP, config.NodeUDPPort, config.MaxTries, 0, config.EndpointHostnames())
@@ -313,10 +313,10 @@ var _ = SIGDescribe("Networking", func() {
 			config.DialFromTestContainer("http", config.ClusterIP, e2enetwork.ClusterHTTPPort, config.MaxTries, config.MaxTries, config.EndpointHostnames())
 		})
 
-		ginkgo.It("should update endpoints: udp(hostNetwork)", func() {
+		ginkgo.It("should update endpoints: udp(hostNetwork) but not in the same Node", func() {
 			config := e2enetwork.NewHostNetworkingTestConfig(f, false, 17)
 			ginkgo.By(fmt.Sprintf("dialing(udp) %v --> %v:%v (config.clusterIP)", config.TestContainerPod.Name, config.ClusterIP, e2enetwork.ClusterUDPPort))
-			config.DialFromTestContainer("udp", config.ClusterIP, e2enetwork.ClusterUDPPort, config.MaxTries, 0, config.EndpointHostnames())
+			config.DialFromTestContainer("udp", config.ClusterIP, e2enetwork.ClusterUDPPort, config.MaxTries, 0, config.EndpointHostnames().Delete(config.TestContainerPod.Spec.NodeSelector["kubernetes.io/hostname"]))
 
 			config.DeleteNetProxyPod()
 
