@@ -262,22 +262,22 @@ var _ = SIGDescribe("Networking", func() {
 			config.DialFromEndpointContainer("udp", config.NodeIP, config.NodeUDPPort, config.MaxTries, 0, config.EndpointHostnames())
 		})
 
-		ginkgo.It("should function for endpoint-Service(hostNetwork): http", func() {
+		ginkgo.It("should not function for endpoint-Service(hostNetwork): http", func() {
 			config := e2enetwork.NewHostNetworkingTestConfig(f, false, 14)
 			ginkgo.By(fmt.Sprintf("dialing(http) %v (endpoint) --> %v:%v (config.clusterIP)", config.EndpointPods[0].Name, config.ClusterIP, e2enetwork.ClusterHTTPPort))
-			config.DialFromEndpointContainer("http", config.ClusterIP, e2enetwork.ClusterHTTPPort, config.MaxTries, 0, config.EndpointHostnames())
+			config.DialFromEndpointContainer("http", config.ClusterIP, e2enetwork.ClusterHTTPPort, config.MaxTries, 0, sets.NewString())
 
 			ginkgo.By(fmt.Sprintf("dialing(http) %v (endpoint) --> %v:%v (nodeIP)", config.EndpointPods[0].Name, config.NodeIP, config.NodeHTTPPort))
-			config.DialFromEndpointContainer("http", config.NodeIP, config.NodeHTTPPort, config.MaxTries, 0, config.EndpointHostnames())
+			config.DialFromEndpointContainer("http", config.NodeIP, config.NodeHTTPPort, config.MaxTries, 0, sets.NewString())
 		})
 
-		ginkgo.It("should function for endpoint-Service(hostNetwork): udp", func() {
+		ginkgo.It("should not function for endpoint-Service(hostNetwork): udp", func() {
 			config := e2enetwork.NewHostNetworkingTestConfig(f, false, 15)
 			ginkgo.By(fmt.Sprintf("dialing(udp) %v (endpoint) --> %v:%v (config.clusterIP)", config.EndpointPods[0].Name, config.ClusterIP, e2enetwork.ClusterUDPPort))
-			config.DialFromEndpointContainer("udp", config.ClusterIP, e2enetwork.ClusterUDPPort, config.MaxTries, 0, config.EndpointHostnames())
+			config.DialFromEndpointContainer("udp", config.ClusterIP, e2enetwork.ClusterUDPPort, config.MaxTries, 0, sets.NewString())
 
 			ginkgo.By(fmt.Sprintf("dialing(udp) %v (endpoint) --> %v:%v (nodeIP)", config.EndpointPods[0].Name, config.NodeIP, config.NodeUDPPort))
-			config.DialFromEndpointContainer("udp", config.NodeIP, config.NodeUDPPort, config.MaxTries, 0, config.EndpointHostnames())
+			config.DialFromEndpointContainer("udp", config.NodeIP, config.NodeUDPPort, config.MaxTries, 0, sets.NewString())
 		})
 
 		ginkgo.It("should update endpoints: http", func() {
