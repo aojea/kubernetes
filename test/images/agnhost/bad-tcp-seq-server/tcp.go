@@ -26,11 +26,17 @@ import (
 )
 
 const (
+	// http://www.networksorcery.com/enp/protocol/tcp.htm
+	// not taking into account Options and padding
 	tcpHeaderSize = 20
 	tcpProtoNum   = 6
 )
 
 const (
+	// Control Bits. 6 bits.
+	// 00	01	02	03	04	05
+	// U	A	P	R	S	F
+
 	// FIN is a TCP flag
 	FIN uint16 = 1 << iota
 	// SYN is a TCP flag
@@ -52,10 +58,15 @@ const (
 )
 
 type tcpPacket struct {
-	SrcPort    uint16 // 0
-	DestPort   uint16 // 2
-	Seq        uint32 // 4
-	Ack        uint32 // 8
+	SrcPort  uint16 // 0
+	DestPort uint16 // 2
+	Seq      uint32 // 4
+	Ack      uint32 // 8
+	// Flags bytes includes
+	// Data Offset. 4 bits.
+	// reserved. 3 bits. (must be zero)
+	// ECN, Explicit Congestion Notification. 3 bits.
+	// Control Bits (Real flags). 6 bits.
 	Flags      uint16 // 13
 	WindowSize uint16 // 14
 	Checksum   uint16 // 16
