@@ -83,19 +83,33 @@ func ProbePodToPodConnectivity(k8s *Kubernetes, model *Model, testCase *TestCase
 	}
 }
 
+// probeWorker continues polling a pod connectivity status, until the incoming "jobs" channel is closed, and writes results back out to the "results" channel.
+// it only writes pass/fail status to a channel and has no failure side effects, this is by design since we do not want to fail inside a goroutine.
 func probeWorker(k8s *Kubernetes, jobs <-chan *ProbeJob, results chan<- *ProbeJobResults) {
 	defer ginkgo.GinkgoRecover()
 	for job := range jobs {
 		podFrom := job.PodFrom
 		containerFrom, err := podFrom.FindContainer(int32(job.FromPort), job.Protocol)
-		framework.ExpectNoError(err, "find container on port %d, protocol %s", job.FromPort, job.Protocol)
-		connected, command, err := k8s.Probe(podFrom.Namespace, podFrom.Name, containerFrom.Name(), job.PodTo.QualifiedServiceAddress(), job.Protocol, job.ToPort)
-		result := &ProbeJobResults{
-			Job:         job,
-			IsConnected: connected,
-			Err:         err,
-			Command:     command,
+		// 1) sanity check that the pod container is found before we run the real test.
+		if err != nil {
+			result := &ProbeJobResults{
+				Job:         job,
+				IsConnected: false,
+				Err:         err,
+				Command:     "(skipped, pod unavailable)",
+			}
+			results <- result
+		} else {
+			// 2) real test runs here...
+			connected, command, err := k8s.Probe(podFrom.Namespace, podFrom.Name, containerFrom.Name(), job.PodTo.QualifiedServiceAddress(), job.Protocol, job.ToPort)
+			result := &ProbeJobResults{
+				Job:         job,
+				IsConnected: connected,
+				Err:         err,
+				Command:     command,
+			}
+			results <- result
 		}
-		results <- result
 	}
+
 }
