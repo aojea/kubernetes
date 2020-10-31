@@ -18,12 +18,13 @@ package netpol
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/kubernetes/test/e2e/framework"
 	imageutils "k8s.io/kubernetes/test/utils/image"
-	"strings"
 )
 
 // Model defines the namespaces, deployments, services, pods, containers and associated
@@ -37,6 +38,7 @@ type Model struct {
 	PodNames       []string
 	Ports          []int32
 	Protocols      []v1.Protocol
+	dnsDomain      string
 }
 
 // NewModel instantiates a model
@@ -204,8 +206,8 @@ func (p *Pod) KubePod() *v1.Pod {
 
 // QualifiedServiceAddress returns the address that can be used to hit a service from
 // any namespace in the cluster
-func (p *Pod) QualifiedServiceAddress() string {
-	return fmt.Sprintf("%s.%s.svc.cluster.local", p.ServiceName(), p.Namespace)
+func (p *Pod) QualifiedServiceAddress(dnsDomain string) string {
+	return fmt.Sprintf("%s.%s.svc.%v", p.ServiceName(), p.Namespace, dnsDomain)
 }
 
 // ServiceName returns the unqualified service name

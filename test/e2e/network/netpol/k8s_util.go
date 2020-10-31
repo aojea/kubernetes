@@ -324,7 +324,7 @@ func (k *Kubernetes) deleteNamespaces(namespaces []string) error {
 }
 
 // waitForHTTPServers waits for all webservers to be up, on all protocols, and then validates them using the same probe logic as the rest of the suite.
-func (k *Kubernetes) waitForHTTPServers(model *Model) error {
+func (k *Kubernetes) waitForHTTPServers(model *Model, dnsDomain string) error {
 	const maxTries = 10
 	const sleepInterval = 1 * time.Second
 	framework.Logf("waiting for HTTP servers (ports 80 and 81) to become ready")
@@ -347,7 +347,7 @@ func (k *Kubernetes) waitForHTTPServers(model *Model) error {
 			if notReady[caseName] {
 				reachability := NewReachability(model.AllPods(), true)
 				testCase.Reachability = reachability
-				ProbePodToPodConnectivity(k, model, testCase)
+				ProbePodToPodConnectivity(k, model, testCase, dnsDomain)
 				_, wrong, _, _ := reachability.Summary(ignoreLoopback)
 				if wrong == 0 {
 					framework.Logf("server %s is ready", caseName)

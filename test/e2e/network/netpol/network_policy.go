@@ -117,7 +117,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 				})
 				framework.ExpectNoError(err, "unable to wait for network policy deletion")
 			} else {
-				framework.ExpectNoError(initializeResources(f), "unable to initialize resources")
+				framework.ExpectNoError(initializeResources(f, framework.TestContext.ClusterDNSDomain), "unable to initialize resources")
 			}
 		})
 
@@ -867,7 +867,7 @@ func getK8SModel(f *framework.Framework) (string, string, string, *Model, *Kuber
 	return nsX, nsY, nsZ, model, k8s
 }
 
-func initializeResources(f *framework.Framework) error {
+func initializeResources(f *framework.Framework, dnsDomain string) error {
 	_, _, _, model, k8s := getK8SModel(f)
 
 	framework.Logf("initializing cluster: ensuring namespaces, deployments, and pods exist and are ready")
@@ -879,5 +879,5 @@ func initializeResources(f *framework.Framework) error {
 
 	framework.Logf("finished initializing cluster state")
 
-	return k8s.waitForHTTPServers(model)
+	return k8s.waitForHTTPServers(model, dnsDomain)
 }
