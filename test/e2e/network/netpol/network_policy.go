@@ -100,23 +100,6 @@ and what is happening in practice:
 */
 var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 	f := framework.NewDefaultFramework("netpol")
-
-	shouldCreateRandomPolicies := true
-	ginkgo.BeforeEach(func() {
-		if shouldCreateRandomPolicies {
-			if useFixedNamespaces {
-				initializeResources(f)
-			}
-			for _, policy := range GetRandomIngressPolicies(21) {
-				_, err := f.ClientSet.NetworkingV1().NetworkPolicies("default").Create(context.TODO(), policy, metav1.CreateOptions{})
-				if err != nil {
-					framework.Logf("unable to create netpol default/%s: %+v", policy.Name, err)
-				}
-			}
-			shouldCreateRandomPolicies = false
-		}
-	})
-
 	ginkgo.Context("NetworkPolicy between server and client", func() {
 		ginkgo.BeforeEach(func() {
 			if useFixedNamespaces {
