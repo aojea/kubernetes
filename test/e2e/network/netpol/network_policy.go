@@ -117,6 +117,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 				})
 				framework.ExpectNoError(err, "unable to wait for network policy deletion")
 			} else {
+				framework.Logf("Using %v as the default dns domain for this cluster... ", framework.TestContext.ClusterDNSDomain)
 				framework.ExpectNoError(initializeResources(f, framework.TestContext.ClusterDNSDomain), "unable to initialize resources")
 			}
 		})
