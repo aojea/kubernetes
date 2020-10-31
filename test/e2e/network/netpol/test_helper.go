@@ -35,8 +35,8 @@ func prettyPrint(policy *networkingv1.NetworkPolicy) string {
 	return string(raw)
 }
 
-// CreateOrUpdatePolicy fails if it can not create or update the policy in the given namespace
-func CreateOrUpdatePolicy(k8s *Kubernetes, policy *networkingv1.NetworkPolicy, namespace string, isVerbose bool) {
+// CreatePolicy creates a policy in the given namespace
+func CreatePolicy(k8s *Kubernetes, policy *networkingv1.NetworkPolicy, namespace string, isVerbose bool) {
 	if isVerbose {
 		framework.Logf("****************************************************************")
 		framework.Logf("Network Policy creating %s/%s \n%s", namespace, policy.Name, prettyPrint(policy))
@@ -44,7 +44,19 @@ func CreateOrUpdatePolicy(k8s *Kubernetes, policy *networkingv1.NetworkPolicy, n
 	}
 
 	_, err := k8s.CreateOrUpdateNetworkPolicy(namespace, policy)
-	framework.ExpectNoError(err, "Unable to create/update netpol %s/%s", namespace, policy.Name)
+	framework.ExpectNoError(err, "Unable to create netpol %s/%s", namespace, policy.Name)
+}
+
+// UpdatePolicy updates a networkpolicy
+func UpdatePolicy(k8s *Kubernetes, policy *networkingv1.NetworkPolicy, namespace string, isVerbose bool) {
+	if isVerbose {
+		framework.Logf("****************************************************************")
+		framework.Logf("Network Policy updating %s/%s \n%s", namespace, policy.Name, prettyPrint(policy))
+		framework.Logf("****************************************************************")
+	}
+
+	_, err := k8s.CreateOrUpdateNetworkPolicy(namespace, policy)
+	framework.ExpectNoError(err, "Unable to update netpol %s/%s", namespace, policy.Name)
 }
 
 // ValidateOrFail validates connectivity

@@ -131,7 +131,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 		ginkgo.It("should support a 'default-deny-ingress' policy [Feature:Netpol]", func() {
 			nsX, _, _, model, k8s := getK8SModel(f)
 			policy := GetDenyIngress("deny-ingress")
-			CreateOrUpdatePolicy(k8s, policy, nsX, true)
+			CreatePolicy(k8s, policy, nsX, true)
 
 			reachability := NewReachability(model.AllPods(), true)
 			reachability.ExpectPeer(&Peer{}, &Peer{Namespace: nsX}, false)
@@ -172,7 +172,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 			framework.ExpectNoError(err, "unmarshal network policy")
 
 			nsX, _, _, model, k8s := getK8SModel(f)
-			CreateOrUpdatePolicy(k8s, np, nsX, true)
+			CreatePolicy(k8s, np, nsX, true)
 
 			reachability := NewReachability(model.AllPods(), true)
 			reachability.ExpectPeer(&Peer{}, &Peer{Namespace: nsX}, false)
@@ -189,7 +189,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 			}
 			policy := GetAllowIngressByPod("x-a-allows-x-b", map[string]string{"pod": "a"}, &allowedPods)
 			nsX, _, _, model, k8s := getK8SModel(f)
-			CreateOrUpdatePolicy(k8s, policy, nsX, true)
+			CreatePolicy(k8s, policy, nsX, true)
 
 			reachability := NewReachability(model.AllPods(), true)
 			reachability.ExpectAllIngress(NewPodString(nsX, "a"), false)
@@ -206,7 +206,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 				},
 			}
 			policy := GetAllowIngressByNamespace("allow-client-a-via-ns-selector", map[string]string{"pod": "a"}, allowedLabels)
-			CreateOrUpdatePolicy(k8s, policy, nsX, true)
+			CreatePolicy(k8s, policy, nsX, true)
 
 			reachability := NewReachability(model.AllPods(), true)
 			// disallow all traffic from the x or z namespaces
@@ -226,7 +226,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 			}
 			policy := GetAllowIngressByPod("x-a-allows-x-b", map[string]string{"pod": "a"}, &allowedPods)
 			nsX, _, _, model, k8s := getK8SModel(f)
-			CreateOrUpdatePolicy(k8s, policy, nsX, true)
+			CreatePolicy(k8s, policy, nsX, true)
 
 			reachability := NewReachability(model.AllPods(), true)
 			reachability.ExpectAllIngress(NewPodString(nsX, "a"), false)
@@ -245,7 +245,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 				}},
 			}
 			policy := GetAllowIngressByNamespace("allow-ns-y-match-selector", map[string]string{"pod": "a"}, allowedNamespaces)
-			CreateOrUpdatePolicy(k8s, policy, nsX, true)
+			CreatePolicy(k8s, policy, nsX, true)
 
 			reachability := NewReachability(model.AllPods(), true)
 			// disallow all traffic from the x or z namespaces
@@ -270,7 +270,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 				},
 			}
 			policy := GetAllowIngressByNamespaceOrPod("allow-ns-y-match-selector", map[string]string{"pod": "a"}, allowedNamespaces, podBAllowlisting)
-			CreateOrUpdatePolicy(k8s, policy, nsX, true)
+			CreatePolicy(k8s, policy, nsX, true)
 
 			reachability := NewReachability(model.AllPods(), true)
 			reachability.Expect(NewPodString(nsX, "a"), NewPodString(nsX, "a"), false)
@@ -294,7 +294,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 				},
 			}
 			policy := GetAllowIngressByNamespaceAndPod("allow-ns-y-podselector-and-nsselector", map[string]string{"pod": "a"}, allowedNamespaces, allowedPod)
-			CreateOrUpdatePolicy(k8s, policy, nsX, true)
+			CreatePolicy(k8s, policy, nsX, true)
 
 			reachability := NewReachability(model.AllPods(), true)
 			reachability.ExpectAllIngress(NewPodString(nsX, "a"), false)
@@ -321,7 +321,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 				}},
 			}
 			policy := GetAllowIngressByNamespaceAndPod("allow-ns-y-z-pod-b-c", map[string]string{"pod": "a"}, allowedNamespaces, allowedPod)
-			CreateOrUpdatePolicy(k8s, policy, nsX, true)
+			CreatePolicy(k8s, policy, nsX, true)
 
 			reachability := NewReachability(model.AllPods(), true)
 			reachability.ExpectPeer(&Peer{Namespace: nsX}, &Peer{Namespace: nsX, Pod: "a"}, false)
@@ -344,7 +344,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 				},
 			}
 			policy := GetAllowIngressByNamespaceAndPod("allow-ns-y-pod-a-via-namespace-pod-selector", map[string]string{"pod": "a"}, allowedNamespaces, allowedPods)
-			CreateOrUpdatePolicy(k8s, policy, nsX, true)
+			CreatePolicy(k8s, policy, nsX, true)
 
 			reachability := NewReachability(model.AllPods(), true)
 			reachability.ExpectAllIngress(NewPodString(nsX, "a"), false)
@@ -362,7 +362,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 				},
 			}
 			allowPort81Policy := GetAllowIngressByNamespaceAndPort("allow-client-a-via-ns-selector", map[string]string{"pod": "a"}, allowedLabels, &intstr.IntOrString{IntVal: 81})
-			CreateOrUpdatePolicy(k8s, allowPort81Policy, nsX, true)
+			CreatePolicy(k8s, allowPort81Policy, nsX, true)
 
 			reachability := NewReachability(model.AllPods(), true)
 			reachability.ExpectPeer(&Peer{Namespace: nsX}, &Peer{Namespace: nsX, Pod: "a"}, false)
@@ -381,7 +381,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 				},
 			}
 			allowPort81Policy := GetAllowIngressByNamespaceAndPort("allow-client-a-via-ns-selector", map[string]string{"pod": "a"}, allowedLabels, &intstr.IntOrString{IntVal: 81})
-			CreateOrUpdatePolicy(k8s, allowPort81Policy, nsX, true)
+			CreatePolicy(k8s, allowPort81Policy, nsX, true)
 
 			reachabilityALLOW := NewReachability(model.AllPods(), true)
 			reachabilityALLOW.ExpectPeer(&Peer{Namespace: nsX}, &Peer{Namespace: nsX, Pod: "a"}, false)
@@ -398,7 +398,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 			ValidateOrFail(k8s, model, &TestCase{FromPort: 81, ToPort: 80, Protocol: v1.ProtocolTCP, Reachability: reachabilityDENY}, isVerbose)
 
 			allowPort80Policy := GetAllowIngressByNamespaceAndPort("allow-client-a-via-ns-selector-80", map[string]string{"pod": "a"}, allowedLabels, &intstr.IntOrString{IntVal: 80})
-			CreateOrUpdatePolicy(k8s, allowPort80Policy, nsX, true)
+			CreatePolicy(k8s, allowPort80Policy, nsX, true)
 
 			ginkgo.By("Verifying that we can add a policy to unblock port 80")
 			ValidateOrFail(k8s, model, &TestCase{FromPort: 81, ToPort: 80, Protocol: v1.ProtocolTCP, Reachability: reachabilityALLOW}, isVerbose)
@@ -408,7 +408,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 			ginkgo.By("Creating a network policy which allows all traffic.")
 			policy := GetAllowIngress("allow-all")
 			nsX, _, _, model, k8s := getK8SModel(f)
-			CreateOrUpdatePolicy(k8s, policy, nsX, true)
+			CreatePolicy(k8s, policy, nsX, true)
 
 			ginkgo.By("Testing pods can connect to both ports when an 'allow-all' policy is present.")
 			reachability := NewReachability(model.AllPods(), true)
@@ -419,7 +419,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 		ginkgo.It("should allow ingress access on one named port [Feature:Netpol]", func() {
 			policy := GetAllowIngressByPort("allow-all", &intstr.IntOrString{Type: intstr.String, StrVal: "serve-81-tcp"})
 			nsX, _, _, model, k8s := getK8SModel(f)
-			CreateOrUpdatePolicy(k8s, policy, nsX, true)
+			CreatePolicy(k8s, policy, nsX, true)
 
 			ginkgo.By("Blocking all ports other then 81 in the entire namespace")
 
@@ -440,7 +440,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 				},
 			}
 			policy := GetAllowIngressByNamespaceAndPort("allow-client-a-via-ns-selector-80", map[string]string{"pod": "a"}, allowedLabels, &intstr.IntOrString{Type: intstr.String, StrVal: "serve-80-tcp"})
-			CreateOrUpdatePolicy(k8s, policy, nsX, true)
+			CreatePolicy(k8s, policy, nsX, true)
 
 			reachability := NewReachability(model.AllPods(), true)
 			// disallow all traffic from the x or z namespaces
@@ -460,7 +460,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 			ginkgo.By("validating egress from port 81 to port 80")
 			policy := GetAllowEgressByPort("allow-egress", &intstr.IntOrString{Type: intstr.String, StrVal: "serve-80-tcp"})
 			nsX, _, _, model, k8s := getK8SModel(f)
-			CreateOrUpdatePolicy(k8s, policy, nsX, true)
+			CreatePolicy(k8s, policy, nsX, true)
 
 			reachabilityPort80 := NewReachability(model.AllPods(), true)
 			ValidateOrFail(k8s, model, &TestCase{FromPort: 81, ToPort: 80, Protocol: v1.ProtocolTCP, Reachability: reachabilityPort80}, isVerbose)
@@ -476,14 +476,14 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 			// part 1) allow all
 			policy := GetAllowIngress("allow-all-mutate-to-deny-all")
 			nsX, _, _, model, k8s := getK8SModel(f)
-			CreateOrUpdatePolicy(k8s, policy, nsX, true)
+			CreatePolicy(k8s, policy, nsX, true)
 
 			reachability := NewReachability(model.AllPods(), true)
 			ValidateOrFail(k8s, model, &TestCase{FromPort: 81, ToPort: 81, Protocol: v1.ProtocolTCP, Reachability: reachability}, isVerbose)
 
 			// part 2) update the policy to deny all
 			policy.Spec.Ingress = []networkingv1.NetworkPolicyIngressRule{}
-			CreateOrUpdatePolicy(k8s, policy, nsX, true)
+			UpdatePolicy(k8s, policy, nsX, true)
 
 			reachabilityDeny := NewReachability(model.AllPods(), true)
 			reachabilityDeny.ExpectPeer(&Peer{}, &Peer{Namespace: nsX}, false)
@@ -500,7 +500,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 				},
 			}
 			policy := GetAllowIngressByNamespace("allow-client-a-via-ns-selector", map[string]string{"pod": "a"}, allowedLabels)
-			CreateOrUpdatePolicy(k8s, policy, nsX, true)
+			CreatePolicy(k8s, policy, nsX, true)
 
 			reachability := NewReachability(model.AllPods(), true)
 			reachability.ExpectAllIngress(NewPodString(nsX, "a"), false)
@@ -530,7 +530,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 			matchLabels := map[string]string{"pod": "b", "pod2": "updated"}
 			allowedLabels := &metav1.LabelSelector{MatchLabels: matchLabels}
 			policy := GetAllowIngressByPod("allow-client-a-via-pod-selector", map[string]string{"pod": "a"}, allowedLabels)
-			CreateOrUpdatePolicy(k8s, policy, nsX, true)
+			CreatePolicy(k8s, policy, nsX, true)
 
 			reachability := NewReachability(model.AllPods(), true)
 			reachability.ExpectAllIngress(NewPodString(nsX, "a"), false)
@@ -554,7 +554,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 			defer ResetPodLabels(k8s, podXA)
 
 			policy := GetDenyIngressForTarget(metav1.LabelSelector{MatchLabels: map[string]string{"target": "isolated"}})
-			CreateOrUpdatePolicy(k8s, policy, nsX, true)
+			CreatePolicy(k8s, policy, nsX, true)
 
 			ginkgo.By("Verify that everything can reach x/a")
 			reachability := NewReachability(model.AllPods(), true)
@@ -585,7 +585,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 				},
 			}
 			nsX, _, _, model, k8s := getK8SModel(f)
-			CreateOrUpdatePolicy(k8s, policy, nsX, true)
+			CreatePolicy(k8s, policy, nsX, true)
 
 			reachabilityPort80 := NewReachability(model.AllPods(), true)
 			reachabilityPort80.ExpectAllIngress(NewPodString(nsX, "a"), false)
@@ -614,7 +614,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 				},
 			}
 			policy := GetAllowEgressByNamespaceAndPod("allow-to-ns-y-pod-a", map[string]string{"pod": "a"}, allowedNamespaces, allowedPods)
-			CreateOrUpdatePolicy(k8s, policy, nsX, true)
+			CreatePolicy(k8s, policy, nsX, true)
 
 			reachability := NewReachability(model.AllPods(), true)
 			reachability.ExpectAllEgress(NewPodString(nsX, "a"), false)
@@ -625,7 +625,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 		ginkgo.It("should enforce multiple ingress policies with ingress allow-all policy taking precedence [Feature:Netpol]", func() {
 			nsX, _, _, model, k8s := getK8SModel(f)
 			policyAllowOnlyPort80 := GetAllowIngressByPort("allow-ingress-port-80", &intstr.IntOrString{Type: intstr.String, StrVal: "serve-80-tcp"})
-			CreateOrUpdatePolicy(k8s, policyAllowOnlyPort80, nsX, true)
+			CreatePolicy(k8s, policyAllowOnlyPort80, nsX, true)
 
 			ginkgo.By("The policy targets port 80 -- so let's make sure traffic on port 81 is blocked")
 
@@ -636,7 +636,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 			ginkgo.By("Allowing all ports")
 
 			policyAllowAll := GetAllowIngress("allow-ingress")
-			CreateOrUpdatePolicy(k8s, policyAllowAll, nsX, true)
+			CreatePolicy(k8s, policyAllowAll, nsX, true)
 
 			reachabilityAll := NewReachability(model.AllPods(), true)
 			ValidateOrFail(k8s, model, &TestCase{FromPort: 81, ToPort: 81, Protocol: v1.ProtocolTCP, Reachability: reachabilityAll}, isVerbose)
@@ -645,7 +645,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 		ginkgo.It("should enforce multiple egress policies with egress allow-all policy taking precedence [Feature:Netpol]", func() {
 			policyAllowPort80 := GetAllowEgressByPort("allow-egress-port-80", &intstr.IntOrString{Type: intstr.String, StrVal: "serve-80-tcp"})
 			nsX, _, _, model, k8s := getK8SModel(f)
-			CreateOrUpdatePolicy(k8s, policyAllowPort80, nsX, true)
+			CreatePolicy(k8s, policyAllowPort80, nsX, true)
 
 			ginkgo.By("Making sure ingress doesn't work other than port 80")
 
@@ -656,7 +656,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 			ginkgo.By("Allowing all ports")
 
 			policyAllowAll := GetAllowEgress()
-			CreateOrUpdatePolicy(k8s, policyAllowAll, nsX, true)
+			CreatePolicy(k8s, policyAllowAll, nsX, true)
 
 			reachabilityAll := NewReachability(model.AllPods(), true)
 			ValidateOrFail(k8s, model, &TestCase{FromPort: 81, ToPort: 81, Protocol: v1.ProtocolTCP, Reachability: reachabilityAll}, isVerbose)
@@ -668,7 +668,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 			// Deny all traffic into and out of "x".
 			policy := GetDenyAll("deny-all")
 			nsX, _, _, model, k8s := getK8SModel(f)
-			CreateOrUpdatePolicy(k8s, policy, nsX, true)
+			CreatePolicy(k8s, policy, nsX, true)
 			reachability := NewReachability(model.AllPods(), true)
 
 			// Expect all traffic into, and out of "x" to be False.
@@ -700,7 +700,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 			}
 			podServerCIDR := fmt.Sprintf("%s/%d", pod.Status.PodIP, hostMask)
 			policyAllowCIDR := GetAllowEgressByCIDR("a", podServerCIDR)
-			CreateOrUpdatePolicy(k8s, policyAllowCIDR, nsX, true)
+			CreatePolicy(k8s, policyAllowCIDR, nsX, true)
 
 			reachability := NewReachability(model.AllPods(), true)
 			reachability.ExpectAllEgress(NewPodString(nsX, "a"), false)
@@ -728,7 +728,9 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 			podServerExceptList := []string{fmt.Sprintf("%s/%d", podB.Status.PodIP, hostMask)}
 
 			policyAllowCIDR := GetAllowEgressByCIDRExcept("a", podServerAllowCIDR, podServerExceptList)
-			CreateOrUpdatePolicy(k8s, policyAllowCIDR, nsX, true)
+
+			// SHOUD THIS BE CREATE OR ALLOW NEED TO MAKE SURE, @JAY IS TESTING NOW 10/31
+			UpdatePolicy(k8s, policyAllowCIDR, nsX, true)
 
 			reachability := NewReachability(model.AllPods(), true)
 			reachability.Expect(NewPodString(nsX, "a"), NewPodString(nsX, "b"), false)
@@ -756,7 +758,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 			podServerAllowCIDR := fmt.Sprintf("%s/4", podA.Status.PodIP)
 			podServerExceptList := []string{fmt.Sprintf("%s/%d", podB.Status.PodIP, hostMask)}
 			policyAllowCIDR := GetAllowEgressByCIDRExcept("a", podServerAllowCIDR, podServerExceptList)
-			CreateOrUpdatePolicy(k8s, policyAllowCIDR, nsX, true)
+			CreatePolicy(k8s, policyAllowCIDR, nsX, true)
 
 			reachability := NewReachability(model.AllPods(), true)
 			reachability.Expect(NewPodString(nsX, "a"), NewPodString(nsX, "b"), false)
@@ -766,7 +768,8 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 			podBIP := fmt.Sprintf("%s/%d", podB.Status.PodIP, hostMask)
 			//// Create NetworkPolicy which allows access to the podServer using podServer's IP in allow CIDR.
 			allowPolicy := GetAllowEgressByCIDR("a", podBIP)
-			CreateOrUpdatePolicy(k8s, allowPolicy, nsX, true)
+			// SHOULD THIS BE UPDATE OR CREATE JAY TESTING 10/31
+			UpdatePolicy(k8s, allowPolicy, nsX, true)
 
 			reachabilityAllow := NewReachability(model.AllPods(), true)
 			reachabilityAllow.ExpectAllEgress(NewPodString(nsX, "a"), false)
@@ -790,7 +793,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 
 			allowEgressPolicy := GetAllowEgressForTarget(metav1.LabelSelector{MatchLabels: targetLabels})
 			nsX, _, _, model, k8s := getK8SModel(f)
-			CreateOrUpdatePolicy(k8s, allowEgressPolicy, nsX, true)
+			CreatePolicy(k8s, allowEgressPolicy, nsX, true)
 
 			allowEgressReachability := NewReachability(model.AllPods(), true)
 			ValidateOrFail(k8s, model, &TestCase{FromPort: 81, ToPort: 80, Protocol: v1.ProtocolTCP, Reachability: allowEgressReachability}, isVerbose)
@@ -798,7 +801,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 			ginkgo.By("Creating a network policy for pod-a that denies traffic from pod-b.")
 
 			denyAllIngressPolicy := GetDenyIngressForTarget(metav1.LabelSelector{MatchLabels: targetLabels})
-			CreateOrUpdatePolicy(k8s, denyAllIngressPolicy, nsX, true)
+			CreatePolicy(k8s, denyAllIngressPolicy, nsX, true)
 
 			denyIngressToXReachability := NewReachability(model.AllPods(), true)
 			denyIngressToXReachability.ExpectAllIngress(NewPodString(nsX, "a"), false)
@@ -821,7 +824,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 		ginkgo.It("should not allow access by TCP when a policy specifies only UDP [Feature:Netpol] [Feature:UDP]", func() {
 			policy := GetAllowIngressOnProtocolByPort("allow-only-udp-ingress-on-port-81", v1.ProtocolUDP, map[string]string{"pod": "a"}, &intstr.IntOrString{IntVal: 81})
 			nsX, _, _, model, k8s := getK8SModel(f)
-			CreateOrUpdatePolicy(k8s, policy, nsX, true)
+			CreatePolicy(k8s, policy, nsX, true)
 
 			ginkgo.By("Creating a network policy for the server which allows traffic only via UDP on port 81.")
 
