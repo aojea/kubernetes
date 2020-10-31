@@ -20,8 +20,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"time"
+
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	v1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -701,6 +702,8 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 			ValidateOrFail(k8s, model, &TestCase{FromPort: 81, ToPort: 80, Protocol: v1.ProtocolTCP, Reachability: reachabilityAll}, isVerbose)
 		})
 
+		// TODO, figure out how the next 3 tests should work with dual stack : do we need a different abstraction then just "podIP"?
+
 		ginkgo.It("should allow egress access to server in CIDR block [Feature:Netpol]", func() {
 			// Getting podServer's status to get podServer's IP, to create the CIDR
 			nsX, nsY, _, model, k8s := getK8SModel(f)
@@ -735,7 +738,12 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 			framework.ExpectNoError(err, "Failing to find pod x/b")
 			podB := podList.Items[0]
 
-			podServerExceptList := []string{fmt.Sprintf("%s/32", podB.Status.PodIP)}
+			hostMask := 32
+			if utilnet.IsIPv6String(podB.Status.PodIP) {
+				hostMask = 128
+			}
+			podServerExceptList := []string{fmt.Sprintf("%s/%d", podB.Status.PodIP, hostMask)}
+
 			policyAllowCIDR := GetAllowEgressByCIDRExcept("a", podServerAllowCIDR, podServerExceptList)
 			CreateOrUpdatePolicy(k8s, policyAllowCIDR, nsX, true)
 
@@ -757,8 +765,13 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 			podB := podList.Items[0]
 
 			// Exclude podServer's IP with an Except clause
+			hostMask := 32
+			if utilnet.IsIPv6String(podB.Status.PodIP) {
+				hostMask = 128
+			}
+
 			podServerAllowCIDR := fmt.Sprintf("%s/4", podA.Status.PodIP)
-			podServerExceptList := []string{fmt.Sprintf("%s/32", podB.Status.PodIP)}
+			podServerExceptList := []string{fmt.Sprintf("%s/%d", podB.Status.PodIP, hostMask)}
 			policyAllowCIDR := GetAllowEgressByCIDRExcept("a", podServerAllowCIDR, podServerExceptList)
 			CreateOrUpdatePolicy(k8s, policyAllowCIDR, nsX, true)
 
@@ -767,7 +780,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 
 			ValidateOrFail(k8s, model, &TestCase{FromPort: 81, ToPort: 80, Protocol: v1.ProtocolTCP, Reachability: reachability}, isVerbose)
 
-			podBIP := fmt.Sprintf("%s/32", podB.Status.PodIP)
+			podBIP := fmt.Sprintf("%s/%d", podB.Status.PodIP, hostMask)
 			//// Create NetworkPolicy which allows access to the podServer using podServer's IP in allow CIDR.
 			allowPolicy := GetAllowEgressByCIDR("a", podBIP)
 			CreateOrUpdatePolicy(k8s, allowPolicy, nsX, true)
