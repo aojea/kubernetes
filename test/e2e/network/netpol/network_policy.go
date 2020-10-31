@@ -811,7 +811,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 		ginkgo.It("should not allow access by TCP when a policy specifies only SCTP [Feature:Netpol] [Feature:SCTP]", func() {
 			policy := GetAllowIngressOnProtocolByPort("allow-only-sctp-ingress-on-port-81", v1.ProtocolSCTP, map[string]string{"pod": "a"}, &intstr.IntOrString{IntVal: 81})
 			nsX, _, _, model, k8s := getK8SModel(f)
-			CreateOrUpdatePolicy(k8s, policy, nsX, true)
+			CreatePolicy(k8s, policy, nsX, true)
 
 			ginkgo.By("Creating a network policy for the server which allows traffic only via SCTP on port 81.")
 
