@@ -39,10 +39,20 @@ import (
 const (
 	addSCTPContainers  = false
 	isVerbose          = true
+
+	// useFixedNamespaces is useful when working on these tests: instead of creating new pods and
+	//   new namespaces for each test run, it creates a fixed set of namespaces and pods, and then
+	//   reuses them for each test case.
+	// The result: tests run much faster.  However, this should only be used as a convenience for
+	//   working on the tests during development.  It should not be enabled in production.
 	useFixedNamespaces = false
 
-	// TODO resolve semantics of loopback network policies: should they always be ALLOWED;
-	//   how do Services affect this?  Calico, Cillium, Antrea seem to do different things.
+	// See https://github.com/kubernetes/kubernetes/issues/95879
+	// The semantics of the effect of network policies on loopback calls may be undefined: should
+	//   they always be ALLOWED; how do Services affect this?
+	//   Calico, Cillium, Antrea seem to do different things.
+	// Since different CNIs have different results, that causes tests including loopback to fail
+	//   on some CNIs.  So let's just ignore loopback calls for the purposes of deciding test pass/fail.
 	ignoreLoopback = true
 )
 
