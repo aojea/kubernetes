@@ -28,6 +28,11 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+const (
+	waitInterval = 1 * time.Second
+	waitTimeout  = 30 * time.Second
+)
+
 // prettyPrint a networkPolicy
 func prettyPrint(policy *networkingv1.NetworkPolicy) string {
 	raw, err := yaml.Marshal(policy)
@@ -88,7 +93,7 @@ func ValidateOrFail(k8s *Kubernetes, model *Model, testCase *TestCase, isVerbose
 func UpdateNamespaceLabels(k8s *Kubernetes, ns string, newNsLabel map[string]string) {
 	err := k8s.setNamespaceLabels(ns, newNsLabel)
 	framework.ExpectNoError(err, "Update namespace %s labels", ns)
-	err = wait.PollImmediate(1*time.Second, 30*time.Second, func() (done bool, err error) {
+	err = wait.PollImmediate(waitInterval, waitTimeout, func() (done bool, err error) {
 		namespace, err := k8s.getNamespace(ns)
 		if err != nil {
 			return false, err
@@ -113,7 +118,7 @@ func AddPodLabels(k8s *Kubernetes, pod *Pod, newPodLabels map[string]string) {
 	_, err = k8s.ClientSet.CoreV1().Pods(pod.Namespace).Update(context.TODO(), kubePod, metav1.UpdateOptions{})
 	framework.ExpectNoError(err, "Failing to add pod %s/%s labels", pod.Namespace, pod.Name)
 
-	err = wait.PollImmediate(1*time.Second, 30*time.Second, func() (done bool, err error) {
+	err = wait.PollImmediate(waitInterval, waitTimeout, func() (done bool, err error) {
 		waitForPod, err := k8s.GetPod(pod.Namespace, pod.Name)
 		if err != nil {
 			return false, err
@@ -141,7 +146,7 @@ func ResetPodLabels(k8s *Kubernetes, pod *Pod) {
 	_, err = k8s.ClientSet.CoreV1().Pods(pod.Namespace).Update(context.TODO(), kubePod, metav1.UpdateOptions{})
 	framework.ExpectNoError(err, "Failing to add pod %s/%s labels", pod.Namespace, pod.Name)
 
-	err = wait.PollImmediate(1*time.Second, 30*time.Second, func() (done bool, err error) {
+	err = wait.PollImmediate(waitInterval, waitTimeout, func() (done bool, err error) {
 		waitForPod, err := k8s.GetPod(pod.Namespace, pod.Name)
 		if err != nil {
 			return false, err

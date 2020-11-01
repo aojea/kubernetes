@@ -101,20 +101,14 @@ and what is happening in practice:
 var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 	f := framework.NewDefaultFramework("netpol")
 
-	needsInit := true
-	ginkgo.BeforeEach(func() {
-		if needsInit && useFixedNamespaces {
-			initializeResources(f)
-			needsInit = false
-		}
-	})
-
 	ginkgo.Context("NetworkPolicy between server and client", func() {
 		ginkgo.BeforeEach(func() {
 			if useFixedNamespaces {
+				_ = initializeResources(f)
+
 				_, _, _, model, k8s := getK8SModel(f)
 				framework.ExpectNoError(k8s.CleanNetworkPolicies(model.NamespaceNames), "unable to clean network policies")
-				err := wait.Poll(1*time.Second, 30*time.Second, func() (done bool, err error) {
+				err := wait.Poll(waitInterval, waitTimeout, func() (done bool, err error) {
 					for _, ns := range model.NamespaceNames {
 						netpols, err := k8s.ClientSet.NetworkingV1().NetworkPolicies(ns).List(context.TODO(), metav1.ListOptions{})
 						framework.ExpectNoError(err, "get network policies from ns %s", ns)
@@ -690,7 +684,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 			time.Sleep(3 * time.Second) // TODO we can remove this eventually, its just a hack to keep CI stable.
 			framework.ExpectNoError(err, "unable to clean network policies")
 
-			// Now the policiy is deleted, we expect all connectivity to work again.
+			// Now the policy is deleted, we expect all connectivity to work again.
 			reachabilityAll := NewReachability(model.AllPods(), true)
 			ValidateOrFail(k8s, model, &TestCase{FromPort: 81, ToPort: 80, Protocol: v1.ProtocolTCP, Reachability: reachabilityAll}, isVerbose)
 		})
@@ -739,7 +733,6 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 
 			policyAllowCIDR := GetAllowEgressByCIDRExcept("a", podServerAllowCIDR, podServerExceptList)
 
-			// SHOUD THIS BE CREATE OR ALLOW NEED TO MAKE SURE, @JAY IS TESTING NOW 10/31
 			CreatePolicy(k8s, policyAllowCIDR, nsX, true)
 
 			reachability := NewReachability(model.AllPods(), true)

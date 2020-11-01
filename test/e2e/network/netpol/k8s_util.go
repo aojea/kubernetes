@@ -55,7 +55,7 @@ func NewKubernetes(framework *framework.Framework, clientSet clientset.Interface
 func (k *Kubernetes) InitializeCluster(model *Model) error {
 	var createdPods []*v1.Pod
 	for _, ns := range model.Namespaces {
-		_, err := k.CreateOrUpdateNamespace(ns.Spec())
+		_, err := k.CreateNamespace(ns.Spec())
 		if err != nil {
 			return err
 		}
@@ -63,13 +63,13 @@ func (k *Kubernetes) InitializeCluster(model *Model) error {
 		for _, pod := range ns.Pods {
 			framework.Logf("creating/updating pod %s/%s", ns.Name, pod.Name)
 
-			kubePod, err := k.CreateOrUpdatePod(pod.KubePod())
+			kubePod, err := k.CreatePod(pod.KubePod())
 			if err != nil {
 				return err
 			}
 			createdPods = append(createdPods, kubePod)
 
-			_, err = k.CreateOrUpdateService(pod.Service())
+			_, err = k.CreateService(pod.Service())
 			if err != nil {
 				return err
 			}
@@ -199,58 +199,37 @@ func (k *Kubernetes) ExecuteRemoteCommand(pod v1.Pod, containerName string, comm
 
 }
 
-// CreateOrUpdateNamespace is a convenience function for idempotent setup of Namespaces
-func (k *Kubernetes) CreateOrUpdateNamespace(ns *v1.Namespace) (*v1.Namespace, error) {
+// CreateNamespace is a convenience function for namespace setup
+func (k *Kubernetes) CreateNamespace(ns *v1.Namespace) (*v1.Namespace, error) {
 	createdNamespace, err := k.ClientSet.CoreV1().Namespaces().Create(context.TODO(), ns, metav1.CreateOptions{})
-	if err == nil {
-		framework.Logf("created namespace %s", ns.Name)
-		return createdNamespace, nil
-	}
-
-	framework.Logf("unable to create namespace %s, let's try updating it instead (error: %s)", ns.Name, err)
-	createdNamespace, err = k.ClientSet.CoreV1().Namespaces().Update(context.TODO(), ns, metav1.UpdateOptions{})
 	if err != nil {
-		framework.Logf("unable to update namespace %s: %s", ns, err)
+		return nil, errors.Wrapf(err, "unable to update namespace %s", ns.Name)
 	}
-
-	return createdNamespace, errors.Wrapf(err, "unable to update namespace %s", ns.Name)
+	return createdNamespace, nil
 }
 
-// CreateOrUpdateService is a convenience function for idempotent setup of Services
-func (k *Kubernetes) CreateOrUpdateService(service *v1.Service) (*v1.Service, error) {
+// CreateService is a convenience function for service setup
+func (k *Kubernetes) CreateService(service *v1.Service) (*v1.Service, error) {
 	ns := service.Namespace
 	name := service.Name
 
 	createdService, err := k.ClientSet.CoreV1().Services(ns).Create(context.TODO(), service, metav1.CreateOptions{})
-	if err == nil {
-		framework.Logf("created service %s/%s", ns, name)
-		return createdService, nil
-	}
-
-	framework.Logf("unable to create service %s/%s, let's try updating it instead (error: %s)", ns, name, err)
-	createdService, err = k.ClientSet.CoreV1().Services(ns).Update(context.TODO(), service, metav1.UpdateOptions{})
 	if err != nil {
-		framework.Logf("unable to update service %s/%s: %s", ns, name, err)
+		return nil, errors.Wrapf(err, "unable to create service %s/%s", ns, name)
 	}
-
-	return createdService, err
+	return createdService, nil
 }
 
-// CreateOrUpdatePod is a convenience function for idempotent setup of pods
-func (k *Kubernetes) CreateOrUpdatePod(pod *v1.Pod) (*v1.Pod, error) {
+// CreatePod is a convenience function for pod setup
+func (k *Kubernetes) CreatePod(pod *v1.Pod) (*v1.Pod, error) {
 	ns := pod.Namespace
-	framework.Logf("creating/updating pod %s/%s", ns, pod.Name)
+	framework.Logf("creating pod %s/%s", ns, pod.Name)
 
 	createdPod, err := k.ClientSet.CoreV1().Pods(ns).Create(context.TODO(), pod, metav1.CreateOptions{})
-	if err == nil {
-		framework.Logf("created pod %s/%s", ns, createdPod.Name)
-		return createdPod, nil
+	if err != nil {
+		return nil, errors.Wrapf(err, "unable to update pod %s/%s", ns, pod.Name)
 	}
-
-	framework.Logf("unable to create pod %s/%s, let's try update instead", ns, pod.Name)
-	createdPod, err = k.ClientSet.CoreV1().Pods(ns).Update(context.TODO(), createdPod, metav1.UpdateOptions{})
-
-	return createdPod, errors.Wrapf(err, "unable to update pod %s/%s", ns, pod.Name)
+	return createdPod, nil
 }
 
 // CleanNetworkPolicies is a convenience function for deleting network policies before startup of any new test.
@@ -334,7 +313,6 @@ func (k *Kubernetes) deleteNamespaces(namespaces []string) error {
 // waitForHTTPServers waits for all webservers to be up, on all protocols, and then validates them using the same probe logic as the rest of the suite.
 func (k *Kubernetes) waitForHTTPServers(model *Model) error {
 	const maxTries = 10
-	const sleepInterval = 1 * time.Second
 	framework.Logf("waiting for HTTP servers (ports 80 and 81) to become ready")
 
 	testCases := map[string]*TestCase{}
@@ -368,7 +346,7 @@ func (k *Kubernetes) waitForHTTPServers(model *Model) error {
 		if len(notReady) == 0 {
 			return nil
 		}
-		time.Sleep(sleepInterval)
+		time.Sleep(waitInterval)
 	}
 	return errors.Errorf("after %d tries, %d HTTP servers are not ready", maxTries, len(notReady))
 }
