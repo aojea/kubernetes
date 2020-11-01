@@ -41,7 +41,7 @@ func prettyPrint(policy *networkingv1.NetworkPolicy) string {
 }
 
 // CreatePolicy creates a policy in the given namespace
-func CreatePolicy(k8s *Kubernetes, policy *networkingv1.NetworkPolicy, namespace string, isVerbose bool) {
+func CreatePolicy(k8s *Kubernetes, policy *networkingv1.NetworkPolicy, namespace string) {
 	if isVerbose {
 		framework.Logf("****************************************************************")
 		framework.Logf("Network Policy creating %s/%s \n%s", namespace, policy.Name, prettyPrint(policy))
@@ -53,7 +53,7 @@ func CreatePolicy(k8s *Kubernetes, policy *networkingv1.NetworkPolicy, namespace
 }
 
 // UpdatePolicy updates a networkpolicy
-func UpdatePolicy(k8s *Kubernetes, policy *networkingv1.NetworkPolicy, namespace string, isVerbose bool) {
+func UpdatePolicy(k8s *Kubernetes, policy *networkingv1.NetworkPolicy, namespace string) {
 	if isVerbose {
 		framework.Logf("****************************************************************")
 		framework.Logf("Network Policy updating %s/%s \n%s", namespace, policy.Name, prettyPrint(policy))
@@ -65,7 +65,7 @@ func UpdatePolicy(k8s *Kubernetes, policy *networkingv1.NetworkPolicy, namespace
 }
 
 // ValidateOrFail validates connectivity
-func ValidateOrFail(k8s *Kubernetes, model *Model, testCase *TestCase, isVerbose bool) {
+func ValidateOrFail(k8s *Kubernetes, model *Model, testCase *TestCase) {
 	ginkgo.By("Validating reachability matrix...")
 
 	// 1st try
@@ -86,7 +86,6 @@ func ValidateOrFail(k8s *Kubernetes, model *Model, testCase *TestCase, isVerbose
 		testCase.Reachability.PrintSummary(true, true, true)
 	}
 	framework.Logf("VALIDATION SUCCESSFUL")
-
 }
 
 // UpdateNamespaceLabels sets the labels for a namespace
@@ -111,12 +110,12 @@ func UpdateNamespaceLabels(k8s *Kubernetes, ns string, newNsLabel map[string]str
 // AddPodLabels adds new labels to a deployment's template
 func AddPodLabels(k8s *Kubernetes, pod *Pod, newPodLabels map[string]string) {
 	kubePod, err := k8s.ClientSet.CoreV1().Pods(pod.Namespace).Get(context.TODO(), pod.Name, metav1.GetOptions{})
-	framework.ExpectNoError(err, "Failing to get pod %s/%s", pod.Namespace, pod.Name)
+	framework.ExpectNoError(err, "Unable to get pod %s/%s", pod.Namespace, pod.Name)
 	for key, val := range newPodLabels {
 		kubePod.Labels[key] = val
 	}
 	_, err = k8s.ClientSet.CoreV1().Pods(pod.Namespace).Update(context.TODO(), kubePod, metav1.UpdateOptions{})
-	framework.ExpectNoError(err, "Failing to add pod %s/%s labels", pod.Namespace, pod.Name)
+	framework.ExpectNoError(err, "Unable to add pod %s/%s labels", pod.Namespace, pod.Name)
 
 	err = wait.PollImmediate(waitInterval, waitTimeout, func() (done bool, err error) {
 		waitForPod, err := k8s.GetPod(pod.Namespace, pod.Name)
@@ -141,10 +140,10 @@ func ResetNamespaceLabels(k8s *Kubernetes, ns string) {
 // ResetPodLabels resets the labels for a deployment's template
 func ResetPodLabels(k8s *Kubernetes, pod *Pod) {
 	kubePod, err := k8s.ClientSet.CoreV1().Pods(pod.Namespace).Get(context.TODO(), pod.Name, metav1.GetOptions{})
-	framework.ExpectNoError(err, "Failing to get pod %s/%s", pod.Namespace, pod.Name)
+	framework.ExpectNoError(err, "Unable to get pod %s/%s", pod.Namespace, pod.Name)
 	kubePod.Labels = pod.LabelSelector()
 	_, err = k8s.ClientSet.CoreV1().Pods(pod.Namespace).Update(context.TODO(), kubePod, metav1.UpdateOptions{})
-	framework.ExpectNoError(err, "Failing to add pod %s/%s labels", pod.Namespace, pod.Name)
+	framework.ExpectNoError(err, "Unable to add pod %s/%s labels", pod.Namespace, pod.Name)
 
 	err = wait.PollImmediate(waitInterval, waitTimeout, func() (done bool, err error) {
 		waitForPod, err := k8s.GetPod(pod.Namespace, pod.Name)
