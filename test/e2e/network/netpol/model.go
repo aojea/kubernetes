@@ -38,16 +38,17 @@ type Model struct {
 	PodNames       []string
 	Ports          []int32
 	Protocols      []v1.Protocol
-	dnsDomain      string
+	DNSDomain      string
 }
 
 // NewModel instantiates a model
-func NewModel(namespaces []string, podNames []string, ports []int32, protocols []v1.Protocol) *Model {
+func NewModel(namespaces []string, podNames []string, ports []int32, protocols []v1.Protocol, dnsDomain string) *Model {
 	model := &Model{
 		NamespaceNames: namespaces,
 		PodNames:       podNames,
 		Ports:          ports,
 		Protocols:      protocols,
+		DNSDomain:      dnsDomain,
 	}
 	for _, ns := range namespaces {
 		var pods []*Pod
@@ -207,7 +208,7 @@ func (p *Pod) KubePod() *v1.Pod {
 // QualifiedServiceAddress returns the address that can be used to hit a service from
 // any namespace in the cluster
 func (p *Pod) QualifiedServiceAddress(dnsDomain string) string {
-	return fmt.Sprintf("%s.%s.svc.%v", p.ServiceName(), p.Namespace, dnsDomain)
+	return fmt.Sprintf("%s.%s.svc.%s", p.ServiceName(), p.Namespace, dnsDomain)
 }
 
 // ServiceName returns the unqualified service name

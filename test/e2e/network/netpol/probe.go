@@ -24,11 +24,12 @@ import (
 
 // ProbeJob packages the data for the input of a pod->pod connectivity probe
 type ProbeJob struct {
-	PodFrom  *Pod
-	PodTo    *Pod
-	FromPort int
-	ToPort   int
-	Protocol v1.Protocol
+	PodFrom        *Pod
+	PodTo          *Pod
+	FromPort       int
+	ToPort         int
+	ToPodDNSDomain string
+	Protocol       v1.Protocol
 }
 
 // ProbeJobResults packages the data for the results of a pod->pod connectivity probe
@@ -40,7 +41,7 @@ type ProbeJobResults struct {
 }
 
 // ProbePodToPodConnectivity runs a series of probes in kube, and records the results in `testCase.Reachability`
-func ProbePodToPodConnectivity(k8s *Kubernetes, model *Model, testCase *TestCase, dnsDomain string) {
+func ProbePodToPodConnectivity(k8s *Kubernetes, model *Model, testCase *TestCase) {
 	k8s.ClearCache()
 	numberOfWorkers := 30
 	allPods := model.AllPods()
@@ -48,16 +49,17 @@ func ProbePodToPodConnectivity(k8s *Kubernetes, model *Model, testCase *TestCase
 	jobs := make(chan *ProbeJob, size)
 	results := make(chan *ProbeJobResults, size)
 	for i := 0; i < numberOfWorkers; i++ {
-		go probeWorker(k8s, jobs, results, dnsDomain)
+		go probeWorker(k8s, jobs, results)
 	}
 	for _, podFrom := range allPods {
 		for _, podTo := range allPods {
 			jobs <- &ProbeJob{
-				PodFrom:  podFrom,
-				PodTo:    podTo,
-				FromPort: testCase.FromPort,
-				ToPort:   testCase.ToPort,
-				Protocol: testCase.Protocol,
+				PodFrom:        podFrom,
+				PodTo:          podTo,
+				FromPort:       testCase.FromPort,
+				ToPort:         testCase.ToPort,
+				ToPodDNSDomain: model.DNSDomain,
+				Protocol:       testCase.Protocol,
 			}
 		}
 	}
@@ -85,7 +87,7 @@ func ProbePodToPodConnectivity(k8s *Kubernetes, model *Model, testCase *TestCase
 
 // probeWorker continues polling a pod connectivity status, until the incoming "jobs" channel is closed, and writes results back out to the "results" channel.
 // it only writes pass/fail status to a channel and has no failure side effects, this is by design since we do not want to fail inside a goroutine.
-func probeWorker(k8s *Kubernetes, jobs <-chan *ProbeJob, results chan<- *ProbeJobResults, dnsDomain string) {
+func probeWorker(k8s *Kubernetes, jobs <-chan *ProbeJob, results chan<- *ProbeJobResults) {
 	defer ginkgo.GinkgoRecover()
 	for job := range jobs {
 		podFrom := job.PodFrom
@@ -101,7 +103,7 @@ func probeWorker(k8s *Kubernetes, jobs <-chan *ProbeJob, results chan<- *ProbeJo
 			results <- result
 		} else {
 			// 2) real test runs here...
-			connected, command, err := k8s.Probe(podFrom.Namespace, podFrom.Name, containerFrom.Name(), job.PodTo.QualifiedServiceAddress(dnsDomain), job.Protocol, job.ToPort)
+			connected, command, err := k8s.Probe(podFrom.Namespace, podFrom.Name, containerFrom.Name(), job.PodTo.QualifiedServiceAddress(job.ToPodDNSDomain), job.Protocol, job.ToPort)
 			result := &ProbeJobResults{
 				Job:         job,
 				IsConnected: connected,

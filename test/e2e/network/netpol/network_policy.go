@@ -100,6 +100,15 @@ and what is happening in practice:
 */
 var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 	f := framework.NewDefaultFramework("netpol")
+
+	needsInit := true
+	ginkgo.BeforeEach(func() {
+		if needsInit && useFixedNamespaces {
+			initializeResources(f)
+			needsInit = false
+		}
+	})
+
 	ginkgo.Context("NetworkPolicy between server and client", func() {
 		ginkgo.BeforeEach(func() {
 			if useFixedNamespaces {
@@ -118,7 +127,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 				framework.ExpectNoError(err, "unable to wait for network policy deletion")
 			} else {
 				framework.Logf("Using %v as the default dns domain for this cluster... ", framework.TestContext.ClusterDNSDomain)
-				framework.ExpectNoError(initializeResources(f, framework.TestContext.ClusterDNSDomain), "unable to initialize resources")
+				framework.ExpectNoError(initializeResources(f), "unable to initialize resources")
 			}
 		})
 
@@ -850,12 +859,12 @@ func getNamespaces(rootNs string) (string, string, string, []string) {
 	return nsX, nsY, nsZ, []string{nsX, nsY, nsZ}
 }
 
-func defaultModel(namespaces []string) *Model {
+func defaultModel(namespaces []string, dnsDomain string) *Model {
 	protocols := []v1.Protocol{v1.ProtocolTCP, v1.ProtocolUDP}
 	if addSCTPContainers {
 		protocols = append(protocols, v1.ProtocolSCTP)
 	}
-	return NewModel(namespaces, []string{"a", "b", "c"}, []int32{80, 81}, protocols)
+	return NewModel(namespaces, []string{"a", "b", "c"}, []int32{80, 81}, protocols, dnsDomain)
 }
 
 func getK8SModel(f *framework.Framework) (string, string, string, *Model, *Kubernetes) {
@@ -863,12 +872,12 @@ func getK8SModel(f *framework.Framework) (string, string, string, *Model, *Kuber
 	rootNs := f.Namespace.GetName()
 	nsX, nsY, nsZ, namespaces := getNamespaces(rootNs)
 
-	model := defaultModel(namespaces)
+	model := defaultModel(namespaces, framework.TestContext.ClusterDNSDomain)
 
 	return nsX, nsY, nsZ, model, k8s
 }
 
-func initializeResources(f *framework.Framework, dnsDomain string) error {
+func initializeResources(f *framework.Framework) error {
 	_, _, _, model, k8s := getK8SModel(f)
 
 	framework.Logf("initializing cluster: ensuring namespaces, deployments, and pods exist and are ready")
@@ -880,5 +889,5 @@ func initializeResources(f *framework.Framework, dnsDomain string) error {
 
 	framework.Logf("finished initializing cluster state")
 
-	return k8s.waitForHTTPServers(model, dnsDomain)
+	return k8s.waitForHTTPServers(model)
 }

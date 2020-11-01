@@ -61,16 +61,15 @@ func UpdatePolicy(k8s *Kubernetes, policy *networkingv1.NetworkPolicy, namespace
 
 // ValidateOrFail validates connectivity
 func ValidateOrFail(k8s *Kubernetes, model *Model, testCase *TestCase, isVerbose bool) {
-	dnsDomain := framework.TestContext.ClusterDNSDomain
 	ginkgo.By("Validating reachability matrix...")
 
 	// 1st try
 	ginkgo.By("Validating reachability matrix... (FIRST TRY)")
-	ProbePodToPodConnectivity(k8s, model, testCase, dnsDomain)
+	ProbePodToPodConnectivity(k8s, model, testCase)
 	// 2nd try, in case first one failed
 	if _, wrong, _, _ := testCase.Reachability.Summary(ignoreLoopback); wrong != 0 {
 		framework.Logf("failed first probe %d wrong results ... retrying (SECOND TRY)", wrong)
-		ProbePodToPodConnectivity(k8s, model, testCase, dnsDomain)
+		ProbePodToPodConnectivity(k8s, model, testCase)
 	}
 
 	// at this point we know if we passed or failed, print final matrix and pass/fail the test.
