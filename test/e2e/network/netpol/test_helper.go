@@ -43,7 +43,7 @@ func CreatePolicy(k8s *Kubernetes, policy *networkingv1.NetworkPolicy, namespace
 		framework.Logf("****************************************************************")
 	}
 
-	_, err := k8s.CreateOrUpdateNetworkPolicy(namespace, policy)
+	_, err := k8s.CreateNetworkPolicy(namespace, policy)
 	framework.ExpectNoError(err, "Unable to create netpol %s/%s", namespace, policy.Name)
 }
 
@@ -55,7 +55,7 @@ func UpdatePolicy(k8s *Kubernetes, policy *networkingv1.NetworkPolicy, namespace
 		framework.Logf("****************************************************************")
 	}
 
-	_, err := k8s.CreateOrUpdateNetworkPolicy(namespace, policy)
+	_, err := k8s.UpdateNetworkPolicy(namespace, policy)
 	framework.ExpectNoError(err, "Unable to update netpol %s/%s", namespace, policy.Name)
 }
 

@@ -281,18 +281,26 @@ func (k *Kubernetes) ClearCache() {
 	framework.Logf("Pod cache successfully cleared")
 }
 
-// CreateOrUpdateNetworkPolicy is a convenience function for updating/creating netpols
-func (k *Kubernetes) CreateOrUpdateNetworkPolicy(ns string, netpol *networkingv1.NetworkPolicy) (*networkingv1.NetworkPolicy, error) {
-	framework.Logf("creating/updating network policy %s/%s", ns, netpol.Name)
+// CreateNetworkPolicy is a convenience function for creating netpols
+func (k *Kubernetes) CreateNetworkPolicy(ns string, netpol *networkingv1.NetworkPolicy) (*networkingv1.NetworkPolicy, error) {
+	framework.Logf("creating network policy %s/%s", ns, netpol.Name)
+	netpol.ObjectMeta.Namespace = ns
+	np, err := k.ClientSet.NetworkingV1().NetworkPolicies(ns).Create(context.TODO(), netpol, metav1.CreateOptions{})
+	if err != nil {
+		return nil, errors.Wrapf(err, "unable to create network policy %s/%s", ns, netpol.Name)
+	}
+	return np, nil
+}
+
+// UpdateNetworkPolicy is a convenience function for updating netpols
+func (k *Kubernetes) UpdateNetworkPolicy(ns string, netpol *networkingv1.NetworkPolicy) (*networkingv1.NetworkPolicy, error) {
+	framework.Logf("updating network policy %s/%s", ns, netpol.Name)
 	netpol.ObjectMeta.Namespace = ns
 	np, err := k.ClientSet.NetworkingV1().NetworkPolicies(ns).Update(context.TODO(), netpol, metav1.UpdateOptions{})
-	if err == nil {
-		return np, nil
+	if err != nil {
+		return np, errors.Wrapf(err, "unable to update network policy %s/%s", ns, netpol.Name)
 	}
-
-	framework.Logf("unable to update network policy %s/%s, let's try creating it instead (error: %s)", ns, netpol.Name, err)
-	np, err = k.ClientSet.NetworkingV1().NetworkPolicies(ns).Create(context.TODO(), netpol, metav1.CreateOptions{})
-	return np, errors.Wrapf(err, "unable to create network policy %s/%s", ns, netpol.Name)
+	return np, nil
 }
 
 func (k *Kubernetes) getNamespace(ns string) (*v1.Namespace, error) {

@@ -740,7 +740,7 @@ var _ = network.SIGDescribe("Netpol [LinuxOnly]", func() {
 			policyAllowCIDR := GetAllowEgressByCIDRExcept("a", podServerAllowCIDR, podServerExceptList)
 
 			// SHOUD THIS BE CREATE OR ALLOW NEED TO MAKE SURE, @JAY IS TESTING NOW 10/31
-			UpdatePolicy(k8s, policyAllowCIDR, nsX, true)
+			CreatePolicy(k8s, policyAllowCIDR, nsX, true)
 
 			reachability := NewReachability(model.AllPods(), true)
 			reachability.Expect(NewPodString(nsX, "a"), NewPodString(nsX, "b"), false)
