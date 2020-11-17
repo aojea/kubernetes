@@ -662,11 +662,11 @@ var _ = SIGDescribe("SchedulerPredicates [Serial]", func() {
 	framework.ConformanceIt("validates that there is no conflict between pods with same hostPort but different hostIP and protocol", func() {
 
 		nodeName := GetNodeThatCanRunPod(f)
-		hostIP1 := getNodeHostIP(f, nodeName)
-		hostIP2 := "127.0.0.1"
+		hostIP1 := "127.0.0.1"
 		if framework.TestContext.ClusterIsIPv6() {
-			hostIP2 = "::1"
+			hostIP1 = "::1"
 		}
+		hostIP2 := getNodeHostIP(f, nodeName)
 
 		// use nodeSelector to make sure the testing pods get assigned on the same node to explicitly verify there exists conflict or not
 		ginkgo.By("Trying to apply a random label on the found node.")
@@ -712,7 +712,8 @@ var _ = SIGDescribe("SchedulerPredicates [Serial]", func() {
 
 		// poll each host port from the same host, we try 5 times
 		timeout := 5
-		cmdPod1 := []string{"/bin/sh", "-c", fmt.Sprintf("curl -g --connect-timeout %v http://%s/hostname", timeout, net.JoinHostPort(hostIP1, strconv.Itoa(int(port))))}
+		// HostIP1 is a loopback address and IPv6 doesn't NAT from localhost -> localhost, it doesn't have the route_localnet kernel hack, so we specify the source IP
+		cmdPod1 := []string{"/bin/sh", "-c", fmt.Sprintf("curl -g --connect-timeout %v --interface %s http://%s/hostname", timeout, hostIP2, net.JoinHostPort(hostIP1, strconv.Itoa(int(port))))}
 		cmdPod2 := []string{"/bin/sh", "-c", fmt.Sprintf("curl -g --connect-timeout %v http://%s/hostname", timeout, net.JoinHostPort(hostIP2, strconv.Itoa(int(port))))}
 		cmdPod3 := []string{"/bin/sh", "-c", fmt.Sprintf("nc -vuz -w %v %s %d", timeout, hostIP2, port)}
 		success := false
