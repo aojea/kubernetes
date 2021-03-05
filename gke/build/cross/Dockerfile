@@ -80,8 +80,8 @@ RUN mkdir /tmp/protoc && cd /tmp/protoc \
   && protoc --version
 
 # Get the code coverage tool and goimports
-RUN go get golang.org/x/tools/cmd/cover \
-           golang.org/x/tools/cmd/goimports \
+RUN go install golang.org/x/tools/cmd/cover@latest \
+           golang.org/x/tools/cmd/goimports@latest \
     && go clean -cache
 
 # Download and symlink etcd. We need this for our integration tests.
