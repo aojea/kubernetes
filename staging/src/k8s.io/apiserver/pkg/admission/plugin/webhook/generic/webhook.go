@@ -49,6 +49,10 @@ type Webhook struct {
 	namespaceMatcher *namespace.Matcher
 	objectMatcher    *object.Matcher
 	dispatcher       Dispatcher
+
+	// specialWebhooksPrecomputedConfig contains config data for webhooks that
+	// could intercept other webhooks (see b/184065096).
+	specialWebhooksPrecomputedConfig *specialWebhooksPrecomputedConfig
 }
 
 var (
@@ -85,6 +89,11 @@ func NewWebhook(handler *admission.Handler, configFile io.Reader, sourceFactory 
 	cm.SetAuthenticationInfoResolver(authInfoResolver)
 	cm.SetServiceResolver(webhookutil.NewDefaultServiceResolver())
 
+	specialWebhooksConfigPrecomputed, err := loadAndPrecomputeSpecialWebhooksConfig(specialWebhooksConfigFile)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Webhook{
 		Handler:          handler,
 		sourceFactory:    sourceFactory,
@@ -92,6 +101,8 @@ func NewWebhook(handler *admission.Handler, configFile io.Reader, sourceFactory 
 		namespaceMatcher: &namespace.Matcher{},
 		objectMatcher:    &object.Matcher{},
 		dispatcher:       dispatcherFactory(&cm),
+
+		specialWebhooksPrecomputedConfig: specialWebhooksConfigPrecomputed,
 	}, nil
 }
 
@@ -219,12 +230,21 @@ func (a *attrWithResourceOverride) GetResource() schema.GroupVersionResource { r
 
 // Dispatch is called by the downstream Validate or Admit methods.
 func (a *Webhook) Dispatch(ctx context.Context, attr admission.Attributes, o admission.ObjectInterfaces) error {
+	hookfilter := func(input []webhook.WebhookAccessor) []webhook.WebhookAccessor { return input }
 	if rules.IsExemptAdmissionConfigurationResource(attr) {
-		return nil
+		hookfilter = a.specialWebhooksFilter(attr)
+		// A nil hookfilter indicates that no special webhooks were found to
+		// intercept this request.
+		if hookfilter == nil {
+			return nil
+		}
 	}
 	if !a.WaitForReady() {
 		return admission.NewForbidden(attr, fmt.Errorf("not yet ready to handle request"))
 	}
-	hooks := a.hookSource.Webhooks()
+	hooks := hookfilter(a.hookSource.Webhooks())
+	if len(hooks) == 0 {
+		return nil
+	}
 	return a.dispatcher.Dispatch(ctx, attr, o, hooks)
 }
