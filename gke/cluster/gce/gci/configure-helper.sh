@@ -2896,6 +2896,9 @@ EOF
     download-extra-addons
     setup-addon-manifests "addons" "gce-extras"
   fi
+  if [[ -d "${src_dir}/gce-extras/in-place" ]]; then
+    copy-manifests "${src_dir}/gce-extras/in-place" "${dst_dir}/gce-extras/in-place"
+  fi
 
 
   # Place addon manager pod manifest.
@@ -3512,7 +3515,6 @@ function main() {
     log-wrap 'UpdateLegacyAddonNodeLabels' update-legacy-addon-node-labels &
     if [[ -e "${KUBE_HOME}/bin/gke-internal-configure-helper.sh" ]]; then
       if [[ -f "${KUBE_HOME}/bin/inplace" ]]; then
-        log-wrap 'SetupInplaceMasterPodManifests' setup-inplace-master-pod-manifests
         log-wrap 'GKESetupInplace' gke-setup-inplace
       fi
     fi
