@@ -219,8 +219,18 @@ func (c *Controller) RunKubernetesService(ch chan struct{}) {
 		// Service definition is not reconciled after first
 		// run, ports and type will be corrected only during
 		// start.
-		if err := c.UpdateKubernetesService(false); err != nil {
-			runtime.HandleError(fmt.Errorf("unable to sync kubernetes service: %v", err))
+		var code int
+		c.readyzClient.Get().AbsPath("/readyz").Do(context.TODO()).StatusCode(&code)
+		if code == http.StatusOK {
+			if err := c.UpdateKubernetesService(false); err != nil {
+				runtime.HandleError(fmt.Errorf("unable to sync kubernetes service: %v", err))
+			}
+		} else {
+			klog.Warningf("apiserver not ready, removing current endpoint from kubernetes service")
+			endpointPorts := createEndpointPortSpec(c.PublicServicePort, "https", c.ExtraEndpointPorts)
+			if err := c.EndpointReconciler.RemoveEndpoints(kubernetesServiceName, c.PublicIP, endpointPorts); err != nil {
+				runtime.HandleError(fmt.Errorf("unable to remove kubernetes service endpoints %v: %v", endpointPorts, err))
+			}
 		}
 	}, c.EndpointInterval, ch)
 }
