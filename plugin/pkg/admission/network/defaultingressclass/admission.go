@@ -22,7 +22,6 @@ import (
 	"io"
 
 	networkingv1 "k8s.io/api/networking/v1"
-	networkingv1beta1 "k8s.io/api/networking/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apiserver/pkg/admission"
@@ -102,11 +101,6 @@ func (a *classDefaulterPlugin) Admit(ctx context.Context, attr admission.Attribu
 		return nil
 	}
 
-	// Ingress class annotation has been set, no need to set a default value.
-	if _, ok := ingress.Annotations[networkingv1beta1.AnnotationIngressClass]; ok {
-		return nil
-	}
-
 	klog.V(4).Infof("No class specified on Ingress %s", ingress.Name)
 
 	defaultClass, err := getDefaultClass(a.lister)
@@ -133,7 +127,7 @@ func getDefaultClass(lister networkingv1listers.IngressClassLister) (*networking
 
 	defaultClasses := []*networkingv1.IngressClass{}
 	for _, class := range list {
-		if class.Annotations[networkingv1beta1.AnnotationIsDefaultIngressClass] == "true" {
+		if class.Annotations[networkingv1.AnnotationIsDefaultIngressClass] == "true" {
 			defaultClasses = append(defaultClasses, class)
 		}
 	}
