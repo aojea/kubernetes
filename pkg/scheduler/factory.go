@@ -31,6 +31,7 @@ import (
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
 	corelisters "k8s.io/client-go/listers/core/v1"
+	restclient "k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/pkg/scheduler/algorithmprovider"
 	schedulerapi "k8s.io/kubernetes/pkg/scheduler/apis/config"
@@ -57,7 +58,8 @@ type Binder interface {
 // Configurator defines I/O, caching, and other functionality needed to
 // construct a new scheduler.
 type Configurator struct {
-	client clientset.Interface
+	client     clientset.Interface
+	kubeConfig *restclient.Config
 
 	recorderFactory profile.RecorderFactory
 
@@ -83,6 +85,9 @@ type Configurator struct {
 	nodeInfoSnapshot  *internalcache.Snapshot
 	extenders         []schedulerapi.Extender
 	frameworkCapturer FrameworkCapturer
+	parallellism      int32
+	// A "cluster event" -> "plugin names" map.
+	clusterEventMap map[framework.ClusterEvent]sets.String
 }
 
 // create a scheduler from a set of registered plugins.
@@ -131,17 +136,17 @@ func (c *Configurator) create() (*Scheduler, error) {
 	}
 
 	// The nominator will be passed all the way to framework instantiation.
-	nominator := internalqueue.NewPodNominator()
-	// It's a "cluster event" -> "plugin names" map.
-	clusterEventMap := make(map[framework.ClusterEvent]sets.String)
+	nominator := internalqueue.NewSafePodNominator(c.informerFactory.Core().V1().Pods().Lister())
 	profiles, err := profile.NewMap(c.profiles, c.registry, c.recorderFactory,
 		frameworkruntime.WithClientSet(c.client),
+		frameworkruntime.WithKubeConfig(c.kubeConfig),
 		frameworkruntime.WithInformerFactory(c.informerFactory),
 		frameworkruntime.WithSnapshotSharedLister(c.nodeInfoSnapshot),
 		frameworkruntime.WithRunAllFilters(c.alwaysCheckAllPredicates),
 		frameworkruntime.WithPodNominator(nominator),
 		frameworkruntime.WithCaptureProfile(frameworkruntime.CaptureProfile(c.frameworkCapturer)),
-		frameworkruntime.WithClusterEventMap(clusterEventMap),
+		frameworkruntime.WithClusterEventMap(c.clusterEventMap),
+		frameworkruntime.WithParallelism(int(c.parallellism)),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("initializing profiles: %v", err)
@@ -157,7 +162,7 @@ func (c *Configurator) create() (*Scheduler, error) {
 		internalqueue.WithPodInitialBackoffDuration(time.Duration(c.podInitialBackoffSeconds)*time.Second),
 		internalqueue.WithPodMaxBackoffDuration(time.Duration(c.podMaxBackoffSeconds)*time.Second),
 		internalqueue.WithPodNominator(nominator),
-		internalqueue.WithClusterEventMap(clusterEventMap),
+		internalqueue.WithClusterEventMap(c.clusterEventMap),
 	)
 
 	// Setup cache debugger.
@@ -190,11 +195,8 @@ func (c *Configurator) create() (*Scheduler, error) {
 // createFromProvider creates a scheduler from the name of a registered algorithm provider.
 func (c *Configurator) createFromProvider(providerName string) (*Scheduler, error) {
 	klog.V(2).InfoS("Creating scheduler from algorithm provider", "algorithmProvider", providerName)
-	r := algorithmprovider.NewRegistry()
-	defaultPlugins, exist := r[providerName]
-	if !exist {
-		return nil, fmt.Errorf("algorithm provider %q is not registered", providerName)
-	}
+
+	defaultPlugins := algorithmprovider.GetDefaultConfig()
 
 	for i := range c.profiles {
 		prof := &c.profiles[i]
@@ -226,7 +228,11 @@ func (c *Configurator) createFromConfig(policy schedulerapi.Policy) (*Scheduler,
 	} else {
 		for _, predicate := range policy.Predicates {
 			klog.V(2).InfoS("Registering predicate", "predicate", predicate.Name)
-			predicateKeys.Insert(lr.ProcessPredicatePolicy(predicate, args))
+			predicateName, err := lr.ProcessPredicatePolicy(predicate, args)
+			if err != nil {
+				return nil, err
+			}
+			predicateKeys.Insert(predicateName)
 		}
 	}
 
@@ -241,7 +247,11 @@ func (c *Configurator) createFromConfig(policy schedulerapi.Policy) (*Scheduler,
 				continue
 			}
 			klog.V(2).InfoS("Registering priority", "priority", priority.Name)
-			priorityKeys[lr.ProcessPriorityPolicy(priority, args)] = priority.Weight
+			priorityName, err := lr.ProcessPriorityPolicy(priority, args)
+			if err != nil {
+				return nil, err
+			}
+			priorityKeys[priorityName] = priority.Weight
 		}
 	}
 

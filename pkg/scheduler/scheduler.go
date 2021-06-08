@@ -28,10 +28,15 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/informers"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
+	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
@@ -89,6 +94,7 @@ type Scheduler struct {
 }
 
 type schedulerOptions struct {
+	kubeConfig               *restclient.Config
 	schedulerAlgorithmSource schedulerapi.SchedulerAlgorithmSource
 	percentageOfNodesToScore int32
 	podInitialBackoffSeconds int64
@@ -98,10 +104,18 @@ type schedulerOptions struct {
 	profiles                   []schedulerapi.KubeSchedulerProfile
 	extenders                  []schedulerapi.Extender
 	frameworkCapturer          FrameworkCapturer
+	parallelism                int32
 }
 
 // Option configures a Scheduler
 type Option func(*schedulerOptions)
+
+// WithKubeConfig sets the kube config for Scheduler.
+func WithKubeConfig(cfg *restclient.Config) Option {
+	return func(o *schedulerOptions) {
+		o.kubeConfig = cfg
+	}
+}
 
 // WithProfiles sets profiles for Scheduler. By default, there is one profile
 // with the name "default-scheduler".
@@ -112,10 +126,9 @@ func WithProfiles(p ...schedulerapi.KubeSchedulerProfile) Option {
 }
 
 // WithParallelism sets the parallelism for all scheduler algorithms. Default is 16.
-// TODO(#95952): Remove global setter in favor of a struct that holds the configuration.
 func WithParallelism(threads int32) Option {
 	return func(o *schedulerOptions) {
-		parallelize.SetParallelism(int(threads))
+		o.parallelism = threads
 	}
 }
 
@@ -183,6 +196,7 @@ var defaultSchedulerOptions = schedulerOptions{
 	percentageOfNodesToScore: schedulerapi.DefaultPercentageOfNodesToScore,
 	podInitialBackoffSeconds: int64(internalqueue.DefaultPodInitialBackoffDuration.Seconds()),
 	podMaxBackoffSeconds:     int64(internalqueue.DefaultPodMaxBackoffDuration.Seconds()),
+	parallelism:              int32(parallelize.DefaultParallelism),
 }
 
 // New returns a Scheduler
@@ -210,9 +224,11 @@ func New(client clientset.Interface,
 	}
 
 	snapshot := internalcache.NewEmptySnapshot()
+	clusterEventMap := make(map[framework.ClusterEvent]sets.String)
 
 	configurator := &Configurator{
 		client:                   client,
+		kubeConfig:               options.kubeConfig,
 		recorderFactory:          recorderFactory,
 		informerFactory:          informerFactory,
 		schedulerCache:           schedulerCache,
@@ -225,6 +241,8 @@ func New(client clientset.Interface,
 		nodeInfoSnapshot:         snapshot,
 		extenders:                options.extenders,
 		frameworkCapturer:        options.frameworkCapturer,
+		parallellism:             options.parallelism,
+		clusterEventMap:          clusterEventMap,
 	}
 
 	metrics.Register()
@@ -268,8 +286,28 @@ func New(client clientset.Interface,
 	sched.StopEverything = stopEverything
 	sched.client = client
 
-	addAllEventHandlers(sched, informerFactory)
+	// Build dynamic client and dynamic informer factory
+	var dynInformerFactory dynamicinformer.DynamicSharedInformerFactory
+	// options.kubeConfig can be nil in tests.
+	if options.kubeConfig != nil {
+		dynClient := dynamic.NewForConfigOrDie(options.kubeConfig)
+		dynInformerFactory = dynamicinformer.NewFilteredDynamicSharedInformerFactory(dynClient, 0, v1.NamespaceAll, nil)
+	}
+
+	addAllEventHandlers(sched, informerFactory, dynInformerFactory, unionedGVKs(clusterEventMap))
 	return sched, nil
+}
+
+func unionedGVKs(m map[framework.ClusterEvent]sets.String) map[framework.GVK]framework.ActionType {
+	gvkMap := make(map[framework.GVK]framework.ActionType)
+	for evt := range m {
+		if _, ok := gvkMap[evt.Resource]; ok {
+			gvkMap[evt.Resource] |= evt.ActionType
+		} else {
+			gvkMap[evt.Resource] = evt.ActionType
+		}
+	}
+	return gvkMap
 }
 
 // initPolicyFromFile initialize policy from file
@@ -637,14 +675,15 @@ func (sched *Scheduler) skipPodSchedule(fwk framework.Framework, pod *v1.Pod) bo
 		return true
 	}
 
-	// Case 2: pod has been assumed and pod updates could be skipped.
+	// Case 2: pod has been assumed could be skipped.
 	// An assumed pod can be added again to the scheduling queue if it got an update event
 	// during its previous scheduling cycle but before getting assumed.
-	if sched.skipPodUpdate(pod) {
-		return true
+	isAssumed, err := sched.SchedulerCache.IsAssumedPod(pod)
+	if err != nil {
+		utilruntime.HandleError(fmt.Errorf("failed to check whether pod %s/%s is assumed: %v", pod.Namespace, pod.Name, err))
+		return false
 	}
-
-	return false
+	return isAssumed
 }
 
 func defaultAlgorithmSourceProviderName() *string {

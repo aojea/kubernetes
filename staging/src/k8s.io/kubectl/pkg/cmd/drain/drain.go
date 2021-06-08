@@ -148,6 +148,7 @@ func NewDrainCmdOptions(f cmdutil.Factory, ioStreams genericclioptions.IOStreams
 			GracePeriodSeconds: -1,
 			Out:                ioStreams.Out,
 			ErrOut:             ioStreams.ErrOut,
+			ChunkSize:          cmdutil.DefaultChunkSize,
 		},
 	}
 	o.drainer.OnPodDeletedOrEvicted = o.onPodDeletedOrEvicted
@@ -198,6 +199,7 @@ func NewCmdDrain(f cmdutil.Factory, ioStreams genericclioptions.IOStreams) *cobr
 	cmd.Flags().BoolVar(&o.drainer.DisableEviction, "disable-eviction", o.drainer.DisableEviction, "Force drain to use delete, even if eviction is supported. This will bypass checking PodDisruptionBudgets, use with caution.")
 	cmd.Flags().IntVar(&o.drainer.SkipWaitForDeleteTimeoutSeconds, "skip-wait-for-delete-timeout", o.drainer.SkipWaitForDeleteTimeoutSeconds, "If pod DeletionTimestamp older than N seconds, skip waiting for the pod.  Seconds must be greater than 0 to skip.")
 
+	cmdutil.AddChunkSizeFlag(cmd, &o.drainer.ChunkSize)
 	cmdutil.AddDryRunFlag(cmd)
 	return cmd
 }
@@ -256,6 +258,7 @@ func (o *DrainCmdOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args [
 	builder := f.NewBuilder().
 		WithScheme(scheme.Scheme, scheme.Scheme.PrioritizedVersionsAllGroups()...).
 		NamespaceParam(o.Namespace).DefaultNamespace().
+		RequestChunksOf(o.drainer.ChunkSize).
 		ResourceNames("nodes", args...).
 		SingleResourceType().
 		Flatten()
@@ -307,9 +310,6 @@ func (o *DrainCmdOptions) RunDrain() error {
 				fmt.Fprintf(o.ErrOut, "error: unable to drain node %q due to error:%s, continuing command...\n", info.Name, err)
 				continue
 			}
-			fmt.Fprintf(o.ErrOut, "DEPRECATED WARNING: Aborting the drain command in a list of nodes will be deprecated.\n"+
-				"The new behavior will make the drain command go through all nodes even if one or more nodes failed during the drain.\n"+
-				"For now, users can try such experience via: --ignore-errors\n")
 			fmt.Fprintf(o.ErrOut, "error: unable to drain node %q, aborting command...\n\n", info.Name)
 			remainingNodes := []string{}
 			fatal = err

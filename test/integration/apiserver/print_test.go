@@ -120,31 +120,8 @@ var missingHanlders = sets.NewString(
 	"ResourceQuota",
 	"Role",
 	"PriorityClass",
-	"PodPreset",
 	"AuditSink",
 )
-
-// known types that are no longer served we should tolerate restmapper errors for
-var unservedTypes = map[schema.GroupVersionKind]bool{
-	{Group: "extensions", Version: "v1beta1", Kind: "ControllerRevision"}: true,
-	{Group: "extensions", Version: "v1beta1", Kind: "DaemonSet"}:          true,
-	{Group: "extensions", Version: "v1beta1", Kind: "Deployment"}:         true,
-	{Group: "extensions", Version: "v1beta1", Kind: "NetworkPolicy"}:      true,
-	{Group: "extensions", Version: "v1beta1", Kind: "PodSecurityPolicy"}:  true,
-	{Group: "extensions", Version: "v1beta1", Kind: "ReplicaSet"}:         true,
-
-	{Group: "apps", Version: "v1beta1", Kind: "ControllerRevision"}: true,
-	{Group: "apps", Version: "v1beta1", Kind: "DaemonSet"}:          true,
-	{Group: "apps", Version: "v1beta1", Kind: "Deployment"}:         true,
-	{Group: "apps", Version: "v1beta1", Kind: "ReplicaSet"}:         true,
-	{Group: "apps", Version: "v1beta1", Kind: "StatefulSet"}:        true,
-
-	{Group: "apps", Version: "v1beta2", Kind: "ControllerRevision"}: true,
-	{Group: "apps", Version: "v1beta2", Kind: "DaemonSet"}:          true,
-	{Group: "apps", Version: "v1beta2", Kind: "Deployment"}:         true,
-	{Group: "apps", Version: "v1beta2", Kind: "ReplicaSet"}:         true,
-	{Group: "apps", Version: "v1beta2", Kind: "StatefulSet"}:        true,
-}
 
 func TestServerSidePrint(t *testing.T) {
 	defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CSIStorageCapacity, true)()
@@ -157,6 +134,7 @@ func TestServerSidePrint(t *testing.T) {
 			{Group: "rbac.authorization.k8s.io", Version: "v1alpha1"},
 			{Group: "scheduling.k8s.io", Version: "v1"},
 			{Group: "storage.k8s.io", Version: "v1alpha1"},
+			{Group: "storage.k8s.io", Version: "v1beta1"},
 			{Group: "extensions", Version: "v1beta1"},
 			{Group: "node.k8s.io", Version: "v1"},
 			{Group: "node.k8s.io", Version: "v1alpha1"},
@@ -217,10 +195,8 @@ func TestServerSidePrint(t *testing.T) {
 		// read table definition as returned by the server
 		mapping, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 		if err != nil {
-			if unservedTypes[gvk] {
-				continue
-			}
-			t.Errorf("unexpected error getting mapping for GVK %s: %v", gvk, err)
+			// if we have no mapping, we aren't serving it and we don't need to check its printer.
+			t.Logf("unexpected error getting mapping for GVK %s: %v", gvk, err)
 			continue
 		}
 		client, err := factory.ClientForMapping(mapping)

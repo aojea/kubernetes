@@ -25,7 +25,6 @@ import (
 	"time"
 
 	systemd "github.com/coreos/go-systemd/daemon"
-	"github.com/go-openapi/spec"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/clock"
 	"k8s.io/apimachinery/pkg/util/sets"
 	utilwaitgroup "k8s.io/apimachinery/pkg/util/waitgroup"
+	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/apiserver/pkg/admission"
 	"k8s.io/apiserver/pkg/audit"
 	"k8s.io/apiserver/pkg/authorization/authorizer"
@@ -55,6 +55,7 @@ import (
 	"k8s.io/kube-openapi/pkg/handler"
 	openapiutil "k8s.io/kube-openapi/pkg/util"
 	openapiproto "k8s.io/kube-openapi/pkg/util/proto"
+	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
 // Info about an API group.
@@ -133,8 +134,14 @@ type GenericAPIServer struct {
 	// Enable swagger and/or OpenAPI if these configs are non-nil.
 	openAPIConfig *openapicommon.Config
 
+	// SkipOpenAPIInstallation indicates not to install the OpenAPI handler
+	// during PrepareRun.
+	// Set this to true when the specific API Server has its own OpenAPI handler
+	// (e.g. kube-aggregator)
+	skipOpenAPIInstallation bool
+
 	// OpenAPIVersionedService controls the /openapi/v2 endpoint, and can be used to update the served spec.
-	// It is set during PrepareRun.
+	// It is set during PrepareRun if `openAPIConfig` is non-nil unless `skipOpenAPIInstallation` is true.
 	OpenAPIVersionedService *handler.OpenAPIService
 
 	// StaticOpenAPISpec is the spec derived from the restful container endpoints.
@@ -203,6 +210,9 @@ type GenericAPIServer struct {
 
 	// StorageVersionManager holds the storage versions of the API resources installed by this server.
 	StorageVersionManager storageversion.Manager
+
+	// Version will enable the /version endpoint if non-nil
+	Version *version.Info
 }
 
 // DelegationTarget is an interface which allows for composition of API servers with top level handling that works
@@ -289,7 +299,7 @@ type preparedGenericAPIServer struct {
 func (s *GenericAPIServer) PrepareRun() preparedGenericAPIServer {
 	s.delegationTarget.PrepareRun()
 
-	if s.openAPIConfig != nil {
+	if s.openAPIConfig != nil && !s.skipOpenAPIInstallation {
 		s.OpenAPIVersionedService, s.StaticOpenAPISpec = routes.OpenAPI{
 			Config: s.openAPIConfig,
 		}.Install(s.Handler.GoRestfulContainer, s.Handler.NonGoRestfulMux)
@@ -549,14 +559,15 @@ func (s *GenericAPIServer) newAPIGroupVersion(apiGroupInfo *APIGroupInfo, groupV
 		GroupVersion:     groupVersion,
 		MetaGroupVersion: apiGroupInfo.MetaGroupVersion,
 
-		ParameterCodec:  apiGroupInfo.ParameterCodec,
-		Serializer:      apiGroupInfo.NegotiatedSerializer,
-		Creater:         apiGroupInfo.Scheme,
-		Convertor:       apiGroupInfo.Scheme,
-		UnsafeConvertor: runtime.UnsafeObjectConvertor(apiGroupInfo.Scheme),
-		Defaulter:       apiGroupInfo.Scheme,
-		Typer:           apiGroupInfo.Scheme,
-		Linker:          runtime.SelfLinker(meta.NewAccessor()),
+		ParameterCodec:        apiGroupInfo.ParameterCodec,
+		Serializer:            apiGroupInfo.NegotiatedSerializer,
+		Creater:               apiGroupInfo.Scheme,
+		Convertor:             apiGroupInfo.Scheme,
+		ConvertabilityChecker: apiGroupInfo.Scheme,
+		UnsafeConvertor:       runtime.UnsafeObjectConvertor(apiGroupInfo.Scheme),
+		Defaulter:             apiGroupInfo.Scheme,
+		Typer:                 apiGroupInfo.Scheme,
+		Linker:                runtime.SelfLinker(meta.NewAccessor()),
 
 		EquivalentResourceRegistry: s.EquivalentResourceRegistry,
 

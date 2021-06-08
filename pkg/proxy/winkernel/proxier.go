@@ -37,6 +37,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/tools/record"
@@ -201,6 +202,11 @@ func (info *endpointsInfo) GetTopology() map[string]string {
 	return nil
 }
 
+// GetZoneHint returns the zone hint for the endpoint.
+func (info *endpointsInfo) GetZoneHints() sets.String {
+	return sets.String{}
+}
+
 // IP returns just the IP part of the endpoint, it's a part of proxy.Endpoint interface.
 func (info *endpointsInfo) IP() string {
 	return info.ip
@@ -348,7 +354,7 @@ func newSourceVIP(hns HostNetworkService, network string, ip string, mac string,
 
 func (ep *endpointsInfo) Cleanup() {
 	Log(ep, "Endpoint Cleanup", 3)
-	if ep.refCount != nil {
+	if !ep.GetIsLocal() && ep.refCount != nil {
 		*ep.refCount--
 
 		// Remove the remote hns endpoint, if no service is referring it
@@ -404,7 +410,9 @@ func (proxier *Proxier) newServiceInfo(port *v1.ServicePort, service *v1.Service
 	}
 
 	for _, ingress := range service.Status.LoadBalancer.Ingress {
-		info.loadBalancerIngressIPs = append(info.loadBalancerIngressIPs, &loadBalancerIngressInfo{ip: ingress.IP})
+		if net.ParseIP(ingress.IP) != nil {
+			info.loadBalancerIngressIPs = append(info.loadBalancerIngressIPs, &loadBalancerIngressInfo{ip: ingress.IP})
+		}
 	}
 	return info
 }
@@ -1149,10 +1157,10 @@ func (proxier *Proxier) syncProxyRules() {
 			} else {
 				// We only share the refCounts for remote endpoints
 				ep.refCount = proxier.endPointsRefCount.getRefCount(newHnsEndpoint.hnsID)
+				*ep.refCount++
 			}
 
 			ep.hnsID = newHnsEndpoint.hnsID
-			*ep.refCount++
 
 			Log(ep, "Endpoint resource found", 3)
 		}
@@ -1242,7 +1250,7 @@ func (proxier *Proxier) syncProxyRules() {
 				uint16(svcInfo.Port()),
 			)
 			if err != nil {
-				klog.ErrorS(err, "Policy creation failed", err)
+				klog.ErrorS(err, "Policy creation failed")
 				continue
 			}
 			externalIP.hnsID = hnsLoadBalancer.hnsID

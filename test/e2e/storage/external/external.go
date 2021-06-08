@@ -264,7 +264,6 @@ func (d *driverDefinition) GetDynamicProvisionStorageClass(e2econfig *storagefra
 	)
 
 	f := e2econfig.Framework
-
 	switch {
 	case d.StorageClass.FromName:
 		sc = &storagev1.StorageClass{Provisioner: d.DriverInfo.Name}
@@ -273,11 +272,9 @@ func (d *driverDefinition) GetDynamicProvisionStorageClass(e2econfig *storagefra
 		framework.ExpectNoError(err, "getting storage class %s", d.StorageClass.FromExistingClassName)
 	case d.StorageClass.FromFile != "":
 		var ok bool
-
 		items, err := utils.LoadFromManifests(d.StorageClass.FromFile)
 		framework.ExpectNoError(err, "load storage class from %s", d.StorageClass.FromFile)
 		framework.ExpectEqual(len(items), 1, "exactly one item from %s", d.StorageClass.FromFile)
-
 		err = utils.PatchItems(f, f.Namespace, items...)
 		framework.ExpectNoError(err, "patch items")
 
@@ -356,7 +353,6 @@ func (d *driverDefinition) GetSnapshotClass(e2econfig *storageframework.PerTestC
 	f := e2econfig.Framework
 	snapshotter := d.DriverInfo.Name
 	ns := e2econfig.Framework.Namespace.Name
-	suffix := "vsc"
 
 	switch {
 	case d.SnapshotClass.FromName:
@@ -389,7 +385,7 @@ func (d *driverDefinition) GetSnapshotClass(e2econfig *storageframework.PerTestC
 		}
 	}
 
-	return utils.GenerateSnapshotClassSpec(snapshotter, parameters, ns, suffix)
+	return utils.GenerateSnapshotClassSpec(snapshotter, parameters, ns)
 }
 
 func (d *driverDefinition) GetVolume(e2econfig *storageframework.PerTestConfig, volumeNumber int) (map[string]string, bool, bool) {

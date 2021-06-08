@@ -41,6 +41,7 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 	"k8s.io/kubernetes/pkg/kubelet/client"
 	proxyutil "k8s.io/kubernetes/pkg/proxy/util"
+	"sigs.k8s.io/structured-merge-diff/v4/fieldpath"
 )
 
 // nodeStrategy implements behavior for nodes
@@ -56,6 +57,18 @@ var Strategy = nodeStrategy{legacyscheme.Scheme, names.SimpleNameGenerator}
 // NamespaceScoped is false for nodes.
 func (nodeStrategy) NamespaceScoped() bool {
 	return false
+}
+
+// GetResetFields returns the set of fields that get reset by the strategy
+// and should not be modified by the user.
+func (nodeStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
+	fields := map[fieldpath.APIVersion]*fieldpath.Set{
+		"v1": fieldpath.NewSet(
+			fieldpath.MakePathOrDie("status"),
+		),
+	}
+
+	return fields
 }
 
 // AllowCreateOnUpdate is false for nodes.
@@ -127,6 +140,9 @@ func (nodeStrategy) Validate(ctx context.Context, obj runtime.Object) field.Erro
 	return validation.ValidateNode(node)
 }
 
+// WarningsOnCreate returns warnings for the creation of the given object.
+func (nodeStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string { return nil }
+
 // Canonicalize normalizes the object after validation.
 func (nodeStrategy) Canonicalize(obj runtime.Object) {
 }
@@ -135,6 +151,11 @@ func (nodeStrategy) Canonicalize(obj runtime.Object) {
 func (nodeStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	errorList := validation.ValidateNode(obj.(*api.Node))
 	return append(errorList, validation.ValidateNodeUpdate(obj.(*api.Node), old.(*api.Node))...)
+}
+
+// WarningsOnUpdate returns warnings for the given update.
+func (nodeStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
+	return nil
 }
 
 func (nodeStrategy) AllowUnconditionalUpdate() bool {
@@ -146,6 +167,18 @@ type nodeStatusStrategy struct {
 }
 
 var StatusStrategy = nodeStatusStrategy{Strategy}
+
+// GetResetFields returns the set of fields that get reset by the strategy
+// and should not be modified by the user.
+func (nodeStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
+	fields := map[fieldpath.APIVersion]*fieldpath.Set{
+		"v1": fieldpath.NewSet(
+			fieldpath.MakePathOrDie("spec"),
+		),
+	}
+
+	return fields
+}
 
 func (nodeStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newNode := obj.(*api.Node)
@@ -170,6 +203,11 @@ func nodeStatusConfigInUse(node *api.Node) bool {
 
 func (nodeStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	return validation.ValidateNodeUpdate(obj.(*api.Node), old.(*api.Node))
+}
+
+// WarningsOnUpdate returns warnings for the given update.
+func (nodeStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
+	return nil
 }
 
 // Canonicalize normalizes the object after validation.

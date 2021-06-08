@@ -21,7 +21,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const JobCompletionIndexAnnotationAlpha = "batch.alpha.kubernetes.io/job-completion-index"
+const JobCompletionIndexAnnotation = "batch.kubernetes.io/job-completion-index"
 
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -95,8 +95,11 @@ type JobSpec struct {
 	// +optional
 	Completions *int32 `json:"completions,omitempty" protobuf:"varint,2,opt,name=completions"`
 
-	// Specifies the duration in seconds relative to the startTime that the job may be active
-	// before the system tries to terminate it; value must be positive integer
+	// Specifies the duration in seconds relative to the startTime that the job
+	// may be continuously active before the system tries to terminate it; value
+	// must be positive integer. If a Job is suspended (at creation or through an
+	// update), this timer will effectively be stopped and reset when the Job is
+	// resumed again.
 	// +optional
 	ActiveDeadlineSeconds *int64 `json:"activeDeadlineSeconds,omitempty" protobuf:"varint,3,opt,name=activeDeadlineSeconds"`
 
@@ -154,24 +157,42 @@ type JobSpec struct {
 	//
 	// `Indexed` means that the Pods of a
 	// Job get an associated completion index from 0 to (.spec.completions - 1),
-	// available in the annotation batch.alpha.kubernetes.io/job-completion-index.
+	// available in the annotation batch.kubernetes.io/job-completion-index.
 	// The Job is considered complete when there is one successfully completed Pod
 	// for each index.
 	// When value is `Indexed`, .spec.completions must be specified and
 	// `.spec.parallelism` must be less than or equal to 10^5.
+	// In addition, The Pod name takes the form
+	// `$(job-name)-$(index)-$(random-string)`,
+	// the Pod hostname takes the form `$(job-name)-$(index)`.
 	//
-	// This field is alpha-level and is only honored by servers that enable the
-	// IndexedJob feature gate. More completion modes can be added in the future.
+	// This field is beta-level. More completion modes can be added in the future.
 	// If the Job controller observes a mode that it doesn't recognize, the
 	// controller skips updates for the Job.
 	// +optional
-	CompletionMode CompletionMode `json:"completionMode,omitempty" protobuf:"bytes,9,opt,name=completionMode,casttype=CompletionMode"`
+	CompletionMode *CompletionMode `json:"completionMode,omitempty" protobuf:"bytes,9,opt,name=completionMode,casttype=CompletionMode"`
+
+	// Suspend specifies whether the Job controller should create Pods or not. If
+	// a Job is created with suspend set to true, no Pods are created by the Job
+	// controller. If a Job is suspended after creation (i.e. the flag goes from
+	// false to true), the Job controller will delete all active Pods associated
+	// with this Job. Users must design their workload to gracefully handle this.
+	// Suspending a Job will reset the StartTime field of the Job, effectively
+	// resetting the ActiveDeadlineSeconds timer too. This is an alpha field and
+	// requires the SuspendJob feature gate to be enabled; otherwise this field
+	// may not be set to true. Defaults to false.
+	// +optional
+	Suspend *bool `json:"suspend,omitempty" protobuf:"varint,10,opt,name=suspend"`
 }
 
 // JobStatus represents the current state of a Job.
 type JobStatus struct {
-	// The latest available observations of an object's current state.
-	// When a job fails, one of the conditions will have type == "Failed".
+	// The latest available observations of an object's current state. When a Job
+	// fails, one of the conditions will have type "Failed" and status true. When
+	// a Job is suspended, one of the conditions will have type "Suspended" and
+	// status true; when the Job is resumed, the status of this condition will
+	// become false. When a Job is completed, one of the conditions will have
+	// type "Complete" and status true.
 	// More info: https://kubernetes.io/docs/concepts/workloads/controllers/jobs-run-to-completion/
 	// +optional
 	// +patchMergeKey=type
@@ -179,9 +200,10 @@ type JobStatus struct {
 	// +listType=atomic
 	Conditions []JobCondition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 
-	// Represents time when the job was acknowledged by the job controller.
-	// It is not guaranteed to be set in happens-before order across separate operations.
-	// It is represented in RFC3339 form and is in UTC.
+	// Represents time when the job controller started processing a job. When a
+	// Job is created in the suspended state, this field is not set until the
+	// first time it is resumed. This field is reset every time a Job is resumed
+	// from suspension. It is represented in RFC3339 form and is in UTC.
 	// +optional
 	StartTime *metav1.Time `json:"startTime,omitempty" protobuf:"bytes,2,opt,name=startTime"`
 
@@ -219,6 +241,8 @@ type JobConditionType string
 
 // These are valid conditions of a job.
 const (
+	// JobSuspended means the job has been suspended.
+	JobSuspended JobConditionType = "Suspended"
 	// JobComplete means the job has completed its execution.
 	JobComplete JobConditionType = "Complete"
 	// JobFailed means the job has failed its execution.

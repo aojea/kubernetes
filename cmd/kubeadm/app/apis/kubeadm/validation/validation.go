@@ -34,7 +34,7 @@ import (
 	bootstraputil "k8s.io/cluster-bootstrap/token/util"
 	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
-	kubeadmapiv1beta2 "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta2"
+	kubeadmapiv1 "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta3"
 	kubeadmcmdoptions "k8s.io/kubernetes/cmd/kubeadm/app/cmd/options"
 	"k8s.io/kubernetes/cmd/kubeadm/app/componentconfigs"
 	"k8s.io/kubernetes/cmd/kubeadm/app/constants"
@@ -493,6 +493,7 @@ func getClusterNodeMask(c *kubeadm.ClusterConfiguration, isIPv6 bool) (int, erro
 }
 
 // ValidateDNS validates the DNS object and collects all encountered errors
+// TODO: Remove with v1beta2 https://github.com/kubernetes/kubeadm/issues/2459
 func ValidateDNS(dns *kubeadm.DNS, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	const kubeDNSType = "kube-dns"
@@ -639,7 +640,7 @@ func ValidateSocketPath(socket string, fldPath *field.Path) field.ErrorList {
 		if !filepath.IsAbs(u.Path) {
 			return append(allErrs, field.Invalid(fldPath, socket, fmt.Sprintf("path is not absolute: %s", socket)))
 		}
-	} else if u.Scheme != kubeadmapiv1beta2.DefaultUrlScheme {
+	} else if u.Scheme != kubeadmapiv1.DefaultUrlScheme {
 		return append(allErrs, field.Invalid(fldPath, socket, fmt.Sprintf("URL scheme %s is not supported", u.Scheme)))
 	}
 

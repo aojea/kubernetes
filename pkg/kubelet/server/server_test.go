@@ -45,6 +45,7 @@ import (
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authentication/user"
 	"k8s.io/apiserver/pkg/authorization/authorizer"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/tools/remotecommand"
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 	statsapi "k8s.io/kubelet/pkg/apis/stats/v1alpha1"
@@ -258,7 +259,9 @@ func (*fakeKubelet) GetPodByCgroupfs(cgroupfs string) (*v1.Pod, bool) { return n
 func (fk *fakeKubelet) ListVolumesForPod(podUID types.UID) (map[string]volume.Volume, bool) {
 	return map[string]volume.Volume{}, true
 }
-
+func (*fakeKubelet) ListBlockVolumesForPod(podUID types.UID) (map[string]volume.BlockVolume, bool) {
+	return map[string]volume.BlockVolume{}, true
+}
 func (*fakeKubelet) RootFsStats() (*statsapi.FsStats, error)    { return nil, nil }
 func (*fakeKubelet) ListPodStats() ([]statsapi.PodStats, error) { return nil, nil }
 func (*fakeKubelet) ListPodStatsAndUpdateCPUNanoCoreUsage() ([]statsapi.PodStats, error) {
@@ -343,7 +346,7 @@ func newServerTestWithDebuggingHandlers(kubeCfg *kubeletconfiginternal.KubeletCo
 	}
 	server := NewServer(
 		fw.fakeKubelet,
-		stats.NewResourceAnalyzer(fw.fakeKubelet, time.Minute),
+		stats.NewResourceAnalyzer(fw.fakeKubelet, time.Minute, &record.FakeRecorder{}),
 		fw.fakeAuth,
 		kubeCfg)
 	fw.serverUnderTest = &server

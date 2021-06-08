@@ -42,8 +42,7 @@ func New(plArgs runtime.Object, handle framework.Handle) (framework.Plugin, erro
 	if err != nil {
 		return nil, err
 	}
-
-	if err := validation.ValidateNodeLabelArgs(args); err != nil {
+	if err := validation.ValidateNodeLabelArgs(nil, &args); err != nil {
 		return nil, err
 	}
 
@@ -69,6 +68,7 @@ type NodeLabel struct {
 
 var _ framework.FilterPlugin = &NodeLabel{}
 var _ framework.ScorePlugin = &NodeLabel{}
+var _ framework.EnqueueExtensions = &NodeLabel{}
 
 // Name returns name of the plugin. It is used in logs, etc.
 func (pl *NodeLabel) Name() string {
@@ -84,16 +84,22 @@ func (pl *NodeLabel) Name() string {
 // Alternately, eliminating nodes that have a certain label, regardless of value, is also useful
 // A node may have a label with "retiring" as key and the date as the value
 // and it may be desirable to avoid scheduling new pods on this node.
-func (pl *NodeLabel) Filter(ctx context.Context, _ *framework.CycleState, pod *v1.Pod, nodeInfo *framework.NodeInfo) *framework.Status {
+func (pl *NodeLabel) Filter(ctx context.Context, _ *framework.CycleState, _ *v1.Pod, nodeInfo *framework.NodeInfo) *framework.Status {
 	node := nodeInfo.Node()
 	if node == nil {
 		return framework.NewStatus(framework.Error, "node not found")
 	}
+
+	size := int64(len(pl.args.PresentLabels) + len(pl.args.AbsentLabels))
+	if size == 0 {
+		return nil
+	}
+
 	nodeLabels := labels.Set(node.Labels)
 	check := func(labels []string, presence bool) bool {
 		for _, label := range labels {
 			exists := nodeLabels.Has(label)
-			if (exists && !presence) || (!exists && presence) {
+			if exists != presence {
 				return false
 			}
 		}
@@ -107,13 +113,19 @@ func (pl *NodeLabel) Filter(ctx context.Context, _ *framework.CycleState, pod *v
 }
 
 // Score invoked at the score extension point.
-func (pl *NodeLabel) Score(ctx context.Context, state *framework.CycleState, pod *v1.Pod, nodeName string) (int64, *framework.Status) {
+func (pl *NodeLabel) Score(ctx context.Context, _ *framework.CycleState, _ *v1.Pod, nodeName string) (int64, *framework.Status) {
 	nodeInfo, err := pl.handle.SnapshotSharedLister().NodeInfos().Get(nodeName)
 	if err != nil {
 		return 0, framework.AsStatus(fmt.Errorf("getting node %q from Snapshot: %w", nodeName, err))
 	}
 
 	node := nodeInfo.Node()
+
+	size := int64(len(pl.args.PresentLabelsPreference) + len(pl.args.AbsentLabelsPreference))
+	if size == 0 {
+		return 0, nil
+	}
+
 	score := int64(0)
 	for _, label := range pl.args.PresentLabelsPreference {
 		if labels.Set(node.Labels).Has(label) {
@@ -125,8 +137,9 @@ func (pl *NodeLabel) Score(ctx context.Context, state *framework.CycleState, pod
 			score += framework.MaxNodeScore
 		}
 	}
+
 	// Take average score for each label to ensure the score doesn't exceed MaxNodeScore.
-	score /= int64(len(pl.args.PresentLabelsPreference) + len(pl.args.AbsentLabelsPreference))
+	score /= size
 
 	return score, nil
 }
@@ -134,4 +147,12 @@ func (pl *NodeLabel) Score(ctx context.Context, state *framework.CycleState, pod
 // ScoreExtensions of the Score plugin.
 func (pl *NodeLabel) ScoreExtensions() framework.ScoreExtensions {
 	return nil
+}
+
+// EventsToRegister returns the possible events that may make a Pod
+// failed by this plugin schedulable.
+func (pl *NodeLabel) EventsToRegister() []framework.ClusterEvent {
+	return []framework.ClusterEvent{
+		{Resource: framework.Node, ActionType: framework.Add | framework.UpdateNodeLabel},
+	}
 }

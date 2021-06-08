@@ -32,7 +32,9 @@ import (
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	clientset "k8s.io/client-go/kubernetes"
 	corelisters "k8s.io/client-go/listers/core/v1"
+	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/pkg/controller/endpointslice/metrics"
+	"k8s.io/kubernetes/pkg/controller/endpointslice/topologycache"
 	endpointutil "k8s.io/kubernetes/pkg/controller/util/endpoint"
 	"k8s.io/kubernetes/pkg/features"
 )
@@ -45,6 +47,9 @@ type reconciler struct {
 	maxEndpointsPerSlice int32
 	endpointSliceTracker *endpointSliceTracker
 	metricsCache         *metrics.Cache
+	// topologyCache tracks the distribution of Nodes and endpoints across zones
+	// to enable TopologyAwareHints.
+	topologyCache *topologycache.TopologyCache
 }
 
 // endpointMeta includes the attributes we group slices on, this type helps with
@@ -73,6 +78,15 @@ func (r *reconciler) reconcile(service *corev1.Service, pods []*corev1.Pod, exis
 	for _, existingSlice := range existingSlices {
 		// service no longer supports that address type, add it to deleted slices
 		if _, ok := serviceSupportedAddressesTypes[existingSlice.AddressType]; !ok {
+			if r.topologyCache != nil {
+				svcKey, err := serviceControllerKey(existingSlice)
+				if err != nil {
+					klog.Warningf("Couldn't get key to remove EndpointSlice from topology cache %+v: %v", existingSlice, err)
+				} else {
+					r.topologyCache.RemoveHints(svcKey, existingSlice.AddressType)
+				}
+			}
+
 			slicesToDelete = append(slicesToDelete, existingSlice)
 			continue
 		}
@@ -99,7 +113,7 @@ func (r *reconciler) reconcile(service *corev1.Service, pods []*corev1.Pod, exis
 	for _, sliceToDelete := range slicesToDelete {
 		err := r.client.DiscoveryV1().EndpointSlices(service.Namespace).Delete(context.TODO(), sliceToDelete.Name, metav1.DeleteOptions{})
 		if err != nil {
-			errs = append(errs, fmt.Errorf("Error deleting %s EndpointSlice for Service %s/%s: %v", sliceToDelete.Name, service.Namespace, service.Name, err))
+			errs = append(errs, fmt.Errorf("error deleting %s EndpointSlice for Service %s/%s: %w", sliceToDelete.Name, service.Namespace, service.Name, err))
 		} else {
 			r.endpointSliceTracker.ExpectDeletion(sliceToDelete)
 			metrics.EndpointSliceChanges.WithLabelValues("delete").Inc()
@@ -185,15 +199,9 @@ func (r *reconciler) reconcileByAddressType(service *corev1.Service, pods []*cor
 			Slices:    len(existingSlicesByPortMap[portMap]) + len(pmSlicesToCreate) - len(pmSlicesToDelete),
 		})
 
-		if len(pmSlicesToCreate) > 0 {
-			slicesToCreate = append(slicesToCreate, pmSlicesToCreate...)
-		}
-		if len(pmSlicesToUpdate) > 0 {
-			slicesToUpdate = append(slicesToUpdate, pmSlicesToUpdate...)
-		}
-		if len(pmSlicesToDelete) > 0 {
-			slicesToDelete = append(slicesToDelete, pmSlicesToDelete...)
-		}
+		slicesToCreate = append(slicesToCreate, pmSlicesToCreate...)
+		slicesToUpdate = append(slicesToUpdate, pmSlicesToUpdate...)
+		slicesToDelete = append(slicesToDelete, pmSlicesToDelete...)
 	}
 
 	// If there are unique sets of ports that are no longer desired, mark
@@ -221,6 +229,25 @@ func (r *reconciler) reconcileByAddressType(service *corev1.Service, pods []*cor
 
 	serviceNN := types.NamespacedName{Name: service.Name, Namespace: service.Namespace}
 	r.metricsCache.UpdateServicePortCache(serviceNN, spMetrics)
+
+	// Topology hints are assigned per address type. This means it is
+	// theoretically possible for endpoints of one address type to be assigned
+	// hints while another endpoints of another address type are not.
+	si := &topologycache.SliceInfo{
+		ServiceKey: fmt.Sprintf("%s/%s", service.Namespace, service.Name),
+		ToCreate:   slicesToCreate,
+		ToUpdate:   slicesToUpdate,
+		Unchanged:  unchangedSlices(existingSlices, slicesToUpdate, slicesToDelete),
+	}
+
+	if r.topologyCache != nil && hintsEnabled(service.Annotations) {
+		slicesToCreate, slicesToUpdate = r.topologyCache.AddHints(si)
+	} else {
+		if r.topologyCache != nil {
+			r.topologyCache.RemoveHints(si.ServiceKey, addressType)
+		}
+		slicesToCreate, slicesToUpdate = topologycache.RemoveHintsFromSlices(si)
+	}
 
 	return r.finalize(service, slicesToCreate, slicesToUpdate, slicesToDelete, triggerTime)
 }
@@ -296,6 +323,14 @@ func (r *reconciler) finalize(
 		r.endpointSliceTracker.ExpectDeletion(endpointSlice)
 		metrics.EndpointSliceChanges.WithLabelValues("delete").Inc()
 	}
+
+	topologyLabel := "Disabled"
+	if r.topologyCache != nil && hintsEnabled(service.Annotations) {
+		topologyLabel = "Auto"
+	}
+
+	numSlicesChanged := len(slicesToCreate) + len(slicesToUpdate) + len(slicesToDelete)
+	metrics.EndpointSlicesChangedPerSync.WithLabelValues(topologyLabel).Observe(float64(numSlicesChanged))
 
 	return nil
 }

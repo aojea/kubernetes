@@ -104,7 +104,7 @@ func validateServiceNodePort(options *ServerRunOptions) []error {
 	}
 
 	if options.KubernetesServiceNodePort > 0 && !options.ServiceNodePortRange.Contains(options.KubernetesServiceNodePort) {
-		errs = append(errs, fmt.Errorf("kubernetes service port range %v doesn't contain %v", options.ServiceNodePortRange, (options.KubernetesServiceNodePort)))
+		errs = append(errs, fmt.Errorf("kubernetes service node port range %v doesn't contain %v", options.ServiceNodePortRange, options.KubernetesServiceNodePort))
 	}
 	return errs
 }
@@ -113,7 +113,7 @@ func validateTokenRequest(options *ServerRunOptions) []error {
 	var errs []error
 
 	enableAttempted := options.ServiceAccountSigningKeyFile != "" ||
-		options.Authentication.ServiceAccounts.Issuer != "" ||
+		(len(options.Authentication.ServiceAccounts.Issuers) != 0 && options.Authentication.ServiceAccounts.Issuers[0] != "") ||
 		len(options.Authentication.APIAudiences) != 0
 
 	enableSucceeded := options.ServiceAccountIssuer != nil
@@ -148,6 +148,17 @@ func validateAPIPriorityAndFairness(options *ServerRunOptions) []error {
 	return nil
 }
 
+func validateAPIServerIdentity(options *ServerRunOptions) []error {
+	var errs []error
+	if options.IdentityLeaseDurationSeconds <= 0 {
+		errs = append(errs, fmt.Errorf("--identity-lease-duration-seconds should be a positive number, but value '%d' provided", options.IdentityLeaseDurationSeconds))
+	}
+	if options.IdentityLeaseRenewIntervalSeconds <= 0 {
+		errs = append(errs, fmt.Errorf("--identity-lease-renew-interval-seconds should be a positive number, but value '%d' provided", options.IdentityLeaseRenewIntervalSeconds))
+	}
+	return errs
+}
+
 // Validate checks ServerRunOptions and return a slice of found errs.
 func (s *ServerRunOptions) Validate() []error {
 	var errs []error
@@ -167,12 +178,7 @@ func (s *ServerRunOptions) Validate() []error {
 	errs = append(errs, validateTokenRequest(s)...)
 	errs = append(errs, s.Metrics.Validate()...)
 	errs = append(errs, s.Logs.Validate()...)
-	if s.IdentityLeaseDurationSeconds <= 0 {
-		errs = append(errs, fmt.Errorf("--identity-lease-duration-seconds should be a positive number, but value '%d' provided", s.IdentityLeaseDurationSeconds))
-	}
-	if s.IdentityLeaseRenewIntervalSeconds <= 0 {
-		errs = append(errs, fmt.Errorf("--identity-lease-renew-interval-seconds should be a positive number, but value '%d' provided", s.IdentityLeaseRenewIntervalSeconds))
-	}
+	errs = append(errs, validateAPIServerIdentity(s)...)
 
 	return errs
 }

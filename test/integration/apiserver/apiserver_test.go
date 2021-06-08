@@ -84,15 +84,15 @@ func setupWithResources(t *testing.T, groupVersions []schema.GroupVersion, resou
 }
 
 func setupWithResourcesWithOptions(t *testing.T, opts *framework.MasterConfigOptions, groupVersions []schema.GroupVersion, resources []schema.GroupVersionResource) (*httptest.Server, clientset.Interface, framework.CloseFunc) {
-	masterConfig := framework.NewIntegrationTestMasterConfigWithOptions(opts)
+	controlPlaneConfig := framework.NewIntegrationTestControlPlaneConfigWithOptions(opts)
 	if len(groupVersions) > 0 || len(resources) > 0 {
 		resourceConfig := controlplane.DefaultAPIResourceConfigSource()
 		resourceConfig.EnableVersions(groupVersions...)
 		resourceConfig.EnableResources(resources...)
-		masterConfig.ExtraConfig.APIResourceConfigSource = resourceConfig
+		controlPlaneConfig.ExtraConfig.APIResourceConfigSource = resourceConfig
 	}
-	masterConfig.GenericConfig.OpenAPIConfig = framework.DefaultOpenAPIConfig()
-	_, s, closeFn := framework.RunAMaster(masterConfig)
+	controlPlaneConfig.GenericConfig.OpenAPIConfig = framework.DefaultOpenAPIConfig()
+	_, s, closeFn := framework.RunAnAPIServer(controlPlaneConfig)
 
 	clientSet, err := clientset.NewForConfig(&restclient.Config{Host: s.URL, QPS: -1})
 	if err != nil {
@@ -102,7 +102,7 @@ func setupWithResourcesWithOptions(t *testing.T, opts *framework.MasterConfigOpt
 }
 
 func verifyStatusCode(t *testing.T, verb, URL, body string, expectedStatusCode int) {
-	// We dont use the typed Go client to send this request to be able to verify the response status code.
+	// We don't use the typed Go client to send this request to be able to verify the response status code.
 	bodyBytes := bytes.NewReader([]byte(body))
 	req, err := http.NewRequest(verb, URL, bodyBytes)
 	if err != nil {
@@ -224,9 +224,9 @@ func Test4xxStatusCodeInvalidPatch(t *testing.T) {
 }
 
 func TestCacheControl(t *testing.T) {
-	masterConfig := framework.NewIntegrationTestMasterConfigWithOptions(&framework.MasterConfigOptions{})
-	masterConfig.GenericConfig.OpenAPIConfig = framework.DefaultOpenAPIConfig()
-	master, _, closeFn := framework.RunAMaster(masterConfig)
+	controlPlaneConfig := framework.NewIntegrationTestControlPlaneConfigWithOptions(&framework.MasterConfigOptions{})
+	controlPlaneConfig.GenericConfig.OpenAPIConfig = framework.DefaultOpenAPIConfig()
+	master, _, closeFn := framework.RunAnAPIServer(controlPlaneConfig)
 	defer closeFn()
 
 	rt, err := restclient.TransportFor(master.GenericAPIServer.LoopbackClientConfig)

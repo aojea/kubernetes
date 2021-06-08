@@ -35,11 +35,9 @@ aliases:
     - deads2k
     - dims
     - enj
-    - erictune
     - lavalamp
     - liggitt
     - mikedanese
-    - mml
     - ncdc
     - smarterclayton
     - sttts
@@ -51,7 +49,6 @@ aliases:
     - mikedanese
     - smarterclayton
   sig-auth-certificates-reviewers:
-    - awly
     - caesarxuchao
     - deads2k
     - dims
@@ -67,11 +64,9 @@ aliases:
     - wojtek-t
 
   sig-auth-encryption-at-rest-approvers:
-    - immutableT
     - smarterclayton
   sig-auth-encryption-at-rest-reviewers:
     - enj
-    - immutableT
     - lavalamp
     - liggitt
     - smarterclayton
@@ -103,7 +98,6 @@ aliases:
     - liggitt
     - mikedanese
   sig-auth-serviceaccounts-reviewers:
-    - awly
     - deads2k
     - enj
     - liggitt
@@ -177,61 +171,54 @@ aliases:
 
   sig-scheduling-maintainers:
     - alculquicondor
-    - k82cn
-    - wojtek-t
-    - ravisantoshgudimetla
     - Huang-Wei
     - ahg-g
     - damemi
   # emeritus:
   # - bsalamat
+  # - k82cn
+  # - ravisantoshgudimetla
+  # - wojtek-t  
   sig-scheduling:
-    - k82cn
-    - resouer
-    - ravisantoshgudimetla
-    - Huang-Wei
-    - wgliang
+    - Huang-Wei    
     - ahg-g
-    - draveness
-    - hex108
     - alculquicondor
-    - liu-cong
     - damemi
     - chendave
     - adtac
+  # emeritus:
+  # - liu-cong
+  # - draveness
+  # - hex108
+  # - resouer
+  # - wgliang
 
   sig-cli-maintainers:
-    - brendandburns
     - deads2k
     - janetkuo
     - seans3
     - monopole
-    - droot
     - apelisse
-    - mengqiy
-    - smarterclayton
     - soltysh
     - pwittrock
     - eddiezane
   # emeritus:
   # - adohe
+  # - brendandburns
+  # - droot
+  # - mengqiy
+  # - smarterclayton
   sig-cli:
     - brianpursley
-    - deads2k
-    - derekwaynecarr
     - dixudx
-    - dims
-    - mengqiy
-    - rootfs
     - seans3
-    - shiywang
-    - smarterclayton
     - soltysh
     - pwittrock
     - zhouya0
     - eddiezane
     - dougsland
     - rikatz
+    - KnVerey
 
   sig-testing-reviewers:
     - bentheelder
@@ -279,14 +266,17 @@ aliases:
     - andrewsykim
     - mrunalp
     - SergeyKanzhelev
+    - bobbypage
   sig-network-driver-approvers:
     - dcbw
     - freehan
 
   sig-network-approvers:
     - andrewsykim
+    - aojea
     - bowei
     - caseydavenport
+    - cmluciano
     - danwinship
     - dcbw
     - freehan
@@ -307,11 +297,11 @@ aliases:
     - mrhohn
     - rramkumar1
     - thockin
+
   sig-apps-approvers:
     - kow3ns
     - janetkuo
     - soltysh
-    - tnozicka
     - erictune
     - smarterclayton
   sig-apps-reviewers:
@@ -323,8 +313,10 @@ aliases:
     - mortent
     - smarterclayton
     - soltysh
-    - tnozicka
     - krmayankk
+  # sig-apps-emeritus:
+  # - tnozicka
+
   sig-autoscaling-maintainers:
     - aleksandra-malinowska
     - bskiba
@@ -460,6 +452,7 @@ aliases:
     - janetkuo
     - kow3ns
     - soltysh
+    - alculquicondor
 
   sig-auth-api-reviewers:
     - enj
@@ -503,12 +496,13 @@ aliases:
     - wojtek-t
 
   sig-scalability-reviewers:
+    - marseel
+    - mborsz
     - mm4tt
     - wojtek-t
 
-  # sig-scheduling-api-reviewers:
-  #   -
-  #   -
+  sig-scheduling-api-reviewers:
+    - alculquicondor
 
   sig-storage-api-reviewers:
     - deads2k
@@ -537,6 +531,8 @@ aliases:
     - thockin
     - sttts
     - soltysh
+  dep-reviewers:
+    - logicalhan
   feature-approvers:
     - andrewsykim     # Cloud Provider
     - brancz          # Instrumentation

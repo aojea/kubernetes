@@ -283,7 +283,7 @@ func TestCleanUp(t *testing.T) {
 		for i := 0; i < 10; i++ {
 			w.stop() // Stop should be callable multiple times without consequence.
 		}
-		if err := waitForWorkerExit(m, []probeKey{key}); err != nil {
+		if err := waitForWorkerExit(t, m, []probeKey{key}); err != nil {
 			t.Fatalf("[%s] error waiting for worker exit: %v", probeType, err)
 		}
 
@@ -330,12 +330,6 @@ func expectResult(t *testing.T, w *worker, expectedResult results.Result, msg st
 func expectContinue(t *testing.T, w *worker, c bool, msg string) {
 	if !c {
 		t.Errorf("[%s - %s] Expected to continue, but did not", w.probeType, msg)
-	}
-}
-
-func expectStop(t *testing.T, w *worker, c bool, msg string) {
-	if c {
-		t.Errorf("[%s - %s] Expected to stop, but did not", w.probeType, msg)
 	}
 }
 
@@ -508,6 +502,6 @@ func TestStartupProbeDisabledByStarted(t *testing.T) {
 	// startupProbe fails, but is disabled
 	m.prober.exec = fakeExecProber{probe.Failure, nil}
 	msg = "Started, probe failure, result success"
-	expectStop(t, w, w.doProbe(), msg)
+	expectContinue(t, w, w.doProbe(), msg)
 	expectResult(t, w, results.Success, msg)
 }

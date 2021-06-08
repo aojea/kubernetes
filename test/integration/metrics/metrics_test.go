@@ -72,7 +72,7 @@ func TestMasterProcessMetrics(t *testing.T) {
 		t.Skipf("not supported on GOOS=%s", runtime.GOOS)
 	}
 
-	_, s, closeFn := framework.RunAMaster(nil)
+	_, s, closeFn := framework.RunAnAPIServer(nil)
 	defer closeFn()
 
 	metrics, err := scrapeMetrics(s)
@@ -88,7 +88,7 @@ func TestMasterProcessMetrics(t *testing.T) {
 }
 
 func TestApiserverMetrics(t *testing.T) {
-	_, s, closeFn := framework.RunAMaster(nil)
+	_, s, closeFn := framework.RunAnAPIServer(nil)
 	defer closeFn()
 
 	// Make a request to the apiserver to ensure there's at least one data point
@@ -99,7 +99,7 @@ func TestApiserverMetrics(t *testing.T) {
 	}
 
 	// Make a request to a deprecated API to ensure there's at least one data point
-	if _, err := client.RbacV1beta1().Roles(metav1.NamespaceDefault).List(context.TODO(), metav1.ListOptions{}); err != nil {
+	if _, err := client.PolicyV1beta1().PodSecurityPolicies().List(context.TODO(), metav1.ListOptions{}); err != nil {
 		t.Fatalf("unexpected error getting rbac roles: %v", err)
 	}
 
@@ -116,7 +116,7 @@ func TestApiserverMetrics(t *testing.T) {
 }
 
 func TestApiserverMetricsLabels(t *testing.T) {
-	_, s, closeFn := framework.RunAMaster(nil)
+	_, s, closeFn := framework.RunAnAPIServer(nil)
 	defer closeFn()
 
 	client, err := clientset.NewForConfig(&restclient.Config{Host: s.URL, QPS: -1})
@@ -266,7 +266,7 @@ func TestApiserverMetricsPods(t *testing.T) {
 		}
 	}
 
-	_, server, closeFn := framework.RunAMaster(framework.NewMasterConfig())
+	_, server, closeFn := framework.RunAnAPIServer(framework.NewControlPlaneConfig())
 	defer closeFn()
 
 	client, err := clientset.NewForConfig(&restclient.Config{Host: server.URL, QPS: -1})
@@ -372,7 +372,7 @@ func TestApiserverMetricsNamespaces(t *testing.T) {
 		}
 	}
 
-	_, server, closeFn := framework.RunAMaster(framework.NewMasterConfig())
+	_, server, closeFn := framework.RunAnAPIServer(framework.NewControlPlaneConfig())
 	defer closeFn()
 
 	client, err := clientset.NewForConfig(&restclient.Config{Host: server.URL, QPS: -1})

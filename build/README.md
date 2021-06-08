@@ -34,7 +34,7 @@ The following scripts are found in the [`build/`](.) directory. Note that all sc
 
 ## Basic Flow
 
-The scripts directly under [`build/`](.) are used to build and test.  They will ensure that the `kube-build` Docker image is built (based on [`build/build-image/Dockerfile`](build-image/Dockerfile) and after base image's `KUBE_BUILD_IMAGE_CROSS_TAG` from Dockerfile is replaced with one of those actual tags of the base image, like `v1.13.9-2`) and then execute the appropriate command in that container.  These scripts will both ensure that the right data is cached from run to run for incremental builds and will copy the results back out of the container.
+The scripts directly under [`build/`](.) are used to build and test.  They will ensure that the `kube-build` Docker image is built (based on [`build/build-image/Dockerfile`](build-image/Dockerfile) and after base image's `KUBE_BUILD_IMAGE_CROSS_TAG` from Dockerfile is replaced with one of those actual tags of the base image, like `v1.13.9-2`) and then execute the appropriate command in that container.  These scripts will both ensure that the right data is cached from run to run for incremental builds and will copy the results back out of the container. You can specify a different registry/name for `kube-cross` by setting `KUBE_BASE_IMAGE_REGISTRY` which defaults to  `k8s.gcr.io/build-image`.
 
 The `kube-build` container image is built by first creating a "context" directory in `_output/images/build-image`.  It is done there instead of at the root of the Kubernetes repo to minimize the amount of data we need to package up when building the image.
 
@@ -62,7 +62,7 @@ In addition, there are some other tar files that are created:
 When building final release tars, they are first staged into `_output/release-stage` before being tar'd up and put into `_output/release-tars`.
 
 ## Reproducibility
-`make release`, its variant `make quick-release`, and Bazel all provide a
+`make release` and its variant `make quick-release` provide a
 hermetic build environment which should provide some level of reproducibility
 for builds. `make` itself is **not** hermetic.
 

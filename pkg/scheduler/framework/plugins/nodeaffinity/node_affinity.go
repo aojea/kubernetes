@@ -21,7 +21,6 @@ import (
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/component-helpers/scheduling/corev1/nodeaffinity"
 	"k8s.io/kubernetes/pkg/scheduler/apis/config"
@@ -37,8 +36,11 @@ type NodeAffinity struct {
 	addedPrefSchedTerms *nodeaffinity.PreferredSchedulingTerms
 }
 
+var _ framework.PreFilterPlugin = &NodeAffinity{}
 var _ framework.FilterPlugin = &NodeAffinity{}
+var _ framework.PreScorePlugin = &NodeAffinity{}
 var _ framework.ScorePlugin = &NodeAffinity{}
+var _ framework.EnqueueExtensions = &NodeAffinity{}
 
 const (
 	// Name is the name of the plugin used in the plugin registry and configurations.
@@ -63,8 +65,7 @@ func (pl *NodeAffinity) Name() string {
 }
 
 type preFilterState struct {
-	requiredNodeSelector labels.Selector
-	requiredNodeAffinity *nodeaffinity.LazyErrorNodeSelector
+	requiredNodeSelectorAndAffinity nodeaffinity.RequiredNodeAffinity
 }
 
 // Clone just returns the same state because it is not affected by pod additions or deletions.
@@ -72,9 +73,17 @@ func (s *preFilterState) Clone() framework.StateData {
 	return s
 }
 
+// EventsToRegister returns the possible events that may make a Pod
+// failed by this plugin schedulable.
+func (pl *NodeAffinity) EventsToRegister() []framework.ClusterEvent {
+	return []framework.ClusterEvent{
+		{Resource: framework.Node, ActionType: framework.Add | framework.UpdateNodeLabel},
+	}
+}
+
 // PreFilter builds and writes cycle state used by Filter.
 func (pl *NodeAffinity) PreFilter(ctx context.Context, cycleState *framework.CycleState, pod *v1.Pod) *framework.Status {
-	state := getPodRequiredNodeSelectorAndAffinity(pod)
+	state := &preFilterState{requiredNodeSelectorAndAffinity: nodeaffinity.GetRequiredNodeAffinity(pod)}
 	cycleState.Write(preFilterStateKey, state)
 	return nil
 }
@@ -99,21 +108,15 @@ func (pl *NodeAffinity) Filter(ctx context.Context, state *framework.CycleState,
 	if err != nil {
 		// Fallback to calculate requiredNodeSelector and requiredNodeAffinity
 		// here when PreFilter is disabled.
-		s = getPodRequiredNodeSelectorAndAffinity(pod)
+		s = &preFilterState{requiredNodeSelectorAndAffinity: nodeaffinity.GetRequiredNodeAffinity(pod)}
 	}
 
-	if s.requiredNodeSelector != nil {
-		if !s.requiredNodeSelector.Matches(labels.Set(node.Labels)) {
-			return framework.NewStatus(framework.UnschedulableAndUnresolvable, ErrReasonPod)
-		}
+	// Ignore parsing errors for backwards compatibility.
+	match, _ := s.requiredNodeSelectorAndAffinity.Match(node)
+	if !match {
+		return framework.NewStatus(framework.UnschedulableAndUnresolvable, ErrReasonPod)
 	}
-	if s.requiredNodeAffinity != nil {
-		// Ignore parsing errors for backwards compatibility.
-		matches, _ := s.requiredNodeAffinity.Match(node)
-		if !matches {
-			return framework.NewStatus(framework.UnschedulableAndUnresolvable, ErrReasonPod)
-		}
-	}
+
 	return nil
 }
 
@@ -224,7 +227,7 @@ func getArgs(obj runtime.Object) (config.NodeAffinityArgs, error) {
 	if !ok {
 		return config.NodeAffinityArgs{}, fmt.Errorf("args are not of type NodeAffinityArgs, got %T", obj)
 	}
-	return *ptr, validation.ValidateNodeAffinityArgs(ptr)
+	return *ptr, validation.ValidateNodeAffinityArgs(nil, ptr)
 }
 
 func getPodPreferredNodeAffinity(pod *v1.Pod) (*nodeaffinity.PreferredSchedulingTerms, error) {
@@ -238,7 +241,7 @@ func getPodPreferredNodeAffinity(pod *v1.Pod) (*nodeaffinity.PreferredScheduling
 func getPreScoreState(cycleState *framework.CycleState) (*preScoreState, error) {
 	c, err := cycleState.Read(preScoreStateKey)
 	if err != nil {
-		return nil, fmt.Errorf("reading %q from cycleState: %v", preScoreStateKey, err)
+		return nil, fmt.Errorf("reading %q from cycleState: %w", preScoreStateKey, err)
 	}
 
 	s, ok := c.(*preScoreState)
@@ -246,21 +249,6 @@ func getPreScoreState(cycleState *framework.CycleState) (*preScoreState, error) 
 		return nil, fmt.Errorf("invalid PreScore state, got type %T", c)
 	}
 	return s, nil
-}
-
-func getPodRequiredNodeSelectorAndAffinity(pod *v1.Pod) *preFilterState {
-	var selector labels.Selector
-	if len(pod.Spec.NodeSelector) > 0 {
-		selector = labels.SelectorFromSet(pod.Spec.NodeSelector)
-	}
-	// Use LazyErrorNodeSelector for backwards compatibility of parsing errors.
-	var affinity *nodeaffinity.LazyErrorNodeSelector
-	if pod.Spec.Affinity != nil &&
-		pod.Spec.Affinity.NodeAffinity != nil &&
-		pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
-		affinity = nodeaffinity.NewLazyErrorNodeSelector(pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution)
-	}
-	return &preFilterState{requiredNodeSelector: selector, requiredNodeAffinity: affinity}
 }
 
 func getPreFilterState(cycleState *framework.CycleState) (*preFilterState, error) {

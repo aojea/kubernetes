@@ -22,6 +22,7 @@ import (
 	"strconv"
 
 	batchv1 "k8s.io/api/batch/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
@@ -39,6 +40,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/batch"
 	"k8s.io/kubernetes/pkg/apis/batch/validation"
 	"k8s.io/kubernetes/pkg/features"
+	"sigs.k8s.io/structured-merge-diff/v4/fieldpath"
 )
 
 // jobStrategy implements verification logic for Replication Controllers.
@@ -71,17 +73,35 @@ func (jobStrategy) NamespaceScoped() bool {
 	return true
 }
 
+// GetResetFields returns the set of fields that get reset by the strategy
+// and should not be modified by the user.
+func (jobStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
+	fields := map[fieldpath.APIVersion]*fieldpath.Set{
+		"batch/v1": fieldpath.NewSet(
+			fieldpath.MakePathOrDie("status"),
+		),
+	}
+
+	return fields
+}
+
 // PrepareForCreate clears the status of a job before creation.
 func (jobStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	job := obj.(*batch.Job)
 	job.Status = batch.JobStatus{}
+
+	job.Generation = 1
 
 	if !utilfeature.DefaultFeatureGate.Enabled(features.TTLAfterFinished) {
 		job.Spec.TTLSecondsAfterFinished = nil
 	}
 
 	if !utilfeature.DefaultFeatureGate.Enabled(features.IndexedJob) {
-		job.Spec.CompletionMode = batch.NonIndexedCompletion
+		job.Spec.CompletionMode = nil
+	}
+
+	if !utilfeature.DefaultFeatureGate.Enabled(features.SuspendJob) {
+		job.Spec.Suspend = nil
 	}
 
 	pod.DropDisabledTemplateFields(&job.Spec.Template, nil)
@@ -97,11 +117,27 @@ func (jobStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object
 		newJob.Spec.TTLSecondsAfterFinished = nil
 	}
 
-	if !utilfeature.DefaultFeatureGate.Enabled(features.IndexedJob) && oldJob.Spec.CompletionMode == batch.NonIndexedCompletion {
-		newJob.Spec.CompletionMode = batch.NonIndexedCompletion
+	if !utilfeature.DefaultFeatureGate.Enabled(features.IndexedJob) && oldJob.Spec.CompletionMode == nil {
+		newJob.Spec.CompletionMode = nil
+	}
+
+	if !utilfeature.DefaultFeatureGate.Enabled(features.SuspendJob) {
+		// There are 3 possible values (nil, true, false) for each flag, so 9
+		// combinations. We want to disallow everything except true->false and
+		// true->nil when the feature gate is disabled. Or, basically allow this
+		// only when oldJob is true.
+		if oldJob.Spec.Suspend == nil || !*oldJob.Spec.Suspend {
+			newJob.Spec.Suspend = oldJob.Spec.Suspend
+		}
 	}
 
 	pod.DropDisabledTemplateFields(&newJob.Spec.Template, &oldJob.Spec.Template)
+
+	// Any changes to the spec increment the generation number.
+	// See metav1.ObjectMeta description for more information on Generation.
+	if !apiequality.Semantic.DeepEqual(newJob.Spec, oldJob.Spec) {
+		newJob.Generation = oldJob.Generation + 1
+	}
 }
 
 // Validate validates a new job.
@@ -113,6 +149,12 @@ func (jobStrategy) Validate(ctx context.Context, obj runtime.Object) field.Error
 	}
 	opts := pod.GetValidationOptionsFromPodTemplate(&job.Spec.Template, nil)
 	return validation.ValidateJob(job, opts)
+}
+
+// WarningsOnCreate returns warnings for the creation of the given object.
+func (jobStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
+	newJob := obj.(*batch.Job)
+	return pod.GetWarningsForPodTemplate(ctx, field.NewPath("spec", "template"), &newJob.Spec.Template, nil)
 }
 
 // generateSelector adds a selector to a job and labels to its template
@@ -189,11 +231,32 @@ func (jobStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) 
 	return append(validationErrorList, updateErrorList...)
 }
 
+// WarningsOnUpdate returns warnings for the given update.
+func (jobStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
+	var warnings []string
+	newJob := obj.(*batch.Job)
+	oldJob := old.(*batch.Job)
+	if newJob.Generation != oldJob.Generation {
+		warnings = pod.GetWarningsForPodTemplate(ctx, field.NewPath("spec", "template"), &newJob.Spec.Template, &oldJob.Spec.Template)
+	}
+	return warnings
+}
+
 type jobStatusStrategy struct {
 	jobStrategy
 }
 
 var StatusStrategy = jobStatusStrategy{Strategy}
+
+// GetResetFields returns the set of fields that get reset by the strategy
+// and should not be modified by the user.
+func (jobStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
+	return map[fieldpath.APIVersion]*fieldpath.Set{
+		"batch/v1": fieldpath.NewSet(
+			fieldpath.MakePathOrDie("spec"),
+		),
+	}
+}
 
 func (jobStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newJob := obj.(*batch.Job)
@@ -203,6 +266,11 @@ func (jobStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.
 
 func (jobStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	return validation.ValidateJobUpdateStatus(obj.(*batch.Job), old.(*batch.Job))
+}
+
+// WarningsOnUpdate returns warnings for the given update.
+func (jobStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
+	return nil
 }
 
 // JobSelectableFields returns a field set that represents the object for matching purposes.

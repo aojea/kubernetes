@@ -18,11 +18,12 @@ package interpodaffinity
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/kubernetes/pkg/scheduler/apis/config"
@@ -139,7 +140,6 @@ func TestRequiredAffinitySingleNode(t *testing.T) {
 			node: &node1,
 			wantStatus: framework.NewStatus(
 				framework.UnschedulableAndUnresolvable,
-				ErrReasonAffinityNotMatch,
 				ErrReasonAffinityRulesNotMatch,
 			),
 		},
@@ -163,7 +163,6 @@ func TestRequiredAffinitySingleNode(t *testing.T) {
 			node: &node1,
 			wantStatus: framework.NewStatus(
 				framework.UnschedulableAndUnresolvable,
-				ErrReasonAffinityNotMatch,
 				ErrReasonAffinityRulesNotMatch,
 			),
 		},
@@ -242,7 +241,6 @@ func TestRequiredAffinitySingleNode(t *testing.T) {
 			node: &node1,
 			wantStatus: framework.NewStatus(
 				framework.UnschedulableAndUnresolvable,
-				ErrReasonAffinityNotMatch,
 				ErrReasonAffinityRulesNotMatch,
 			),
 		},
@@ -365,7 +363,6 @@ func TestRequiredAffinitySingleNode(t *testing.T) {
 			node: &node1,
 			wantStatus: framework.NewStatus(
 				framework.Unschedulable,
-				ErrReasonAffinityNotMatch,
 				ErrReasonAntiAffinityRulesNotMatch,
 			),
 		},
@@ -420,7 +417,6 @@ func TestRequiredAffinitySingleNode(t *testing.T) {
 			node: &node1,
 			wantStatus: framework.NewStatus(
 				framework.Unschedulable,
-				ErrReasonAffinityNotMatch,
 				ErrReasonExistingAntiAffinityRulesNotMatch,
 			),
 		},
@@ -445,7 +441,6 @@ func TestRequiredAffinitySingleNode(t *testing.T) {
 			node: &node1,
 			wantStatus: framework.NewStatus(
 				framework.UnschedulableAndUnresolvable,
-				ErrReasonAffinityNotMatch,
 				ErrReasonAffinityRulesNotMatch,
 			),
 		},
@@ -476,7 +471,6 @@ func TestRequiredAffinitySingleNode(t *testing.T) {
 			node: &node1,
 			wantStatus: framework.NewStatus(
 				framework.Unschedulable,
-				ErrReasonAffinityNotMatch,
 				ErrReasonExistingAntiAffinityRulesNotMatch,
 			),
 		},
@@ -552,7 +546,6 @@ func TestRequiredAffinitySingleNode(t *testing.T) {
 			node: &node1,
 			wantStatus: framework.NewStatus(
 				framework.Unschedulable,
-				ErrReasonAffinityNotMatch,
 				ErrReasonAntiAffinityRulesNotMatch,
 			),
 		},
@@ -602,7 +595,6 @@ func TestRequiredAffinitySingleNode(t *testing.T) {
 			node: &node1,
 			wantStatus: framework.NewStatus(
 				framework.Unschedulable,
-				ErrReasonAffinityNotMatch,
 				ErrReasonAntiAffinityRulesNotMatch,
 			),
 		},
@@ -652,7 +644,6 @@ func TestRequiredAffinitySingleNode(t *testing.T) {
 			node: &node1,
 			wantStatus: framework.NewStatus(
 				framework.Unschedulable,
-				ErrReasonAffinityNotMatch,
 				ErrReasonExistingAntiAffinityRulesNotMatch,
 			),
 		},
@@ -713,7 +704,6 @@ func TestRequiredAffinitySingleNode(t *testing.T) {
 			node: &node1,
 			wantStatus: framework.NewStatus(
 				framework.Unschedulable,
-				ErrReasonAffinityNotMatch,
 				ErrReasonAntiAffinityRulesNotMatch,
 			),
 		},
@@ -774,7 +764,6 @@ func TestRequiredAffinitySingleNode(t *testing.T) {
 			node: &node1,
 			wantStatus: framework.NewStatus(
 				framework.Unschedulable,
-				ErrReasonAffinityNotMatch,
 				ErrReasonAntiAffinityRulesNotMatch,
 			),
 		},
@@ -911,7 +900,6 @@ func TestRequiredAffinitySingleNode(t *testing.T) {
 			node: &node1,
 			wantStatus: framework.NewStatus(
 				framework.UnschedulableAndUnresolvable,
-				ErrReasonAffinityNotMatch,
 				ErrReasonAffinityRulesNotMatch,
 			),
 		},
@@ -945,7 +933,6 @@ func TestRequiredAffinitySingleNode(t *testing.T) {
 			node: &node1,
 			wantStatus: framework.NewStatus(
 				framework.Unschedulable,
-				ErrReasonAffinityNotMatch,
 				ErrReasonAntiAffinityRulesNotMatch,
 			),
 		},
@@ -971,7 +958,6 @@ func TestRequiredAffinitySingleNode(t *testing.T) {
 			node: &node1,
 			wantStatus: framework.NewStatus(
 				framework.Unschedulable,
-				ErrReasonAffinityNotMatch,
 				ErrReasonAntiAffinityRulesNotMatch,
 			),
 		},
@@ -1015,7 +1001,7 @@ func TestRequiredAffinitySingleNode(t *testing.T) {
 					EnablePodAffinityNamespaceSelector: !test.disableNSSelector,
 				})
 			}
-			p := plugintesting.SetupPlugin(ctx, t, n, &config.InterPodAffinityArgs{}, snapshot, namespaces)
+			p := plugintesting.SetupPluginWithInformers(ctx, t, n, &config.InterPodAffinityArgs{}, snapshot, namespaces)
 			state := framework.NewCycleState()
 			preFilterStatus := p.(framework.PreFilterPlugin).PreFilter(ctx, state, test.pod)
 			if !preFilterStatus.IsSuccess() {
@@ -1084,7 +1070,6 @@ func TestRequiredAffinityMultipleNodes(t *testing.T) {
 				nil,
 				framework.NewStatus(
 					framework.UnschedulableAndUnresolvable,
-					ErrReasonAffinityNotMatch,
 					ErrReasonAffinityRulesNotMatch,
 				),
 			},
@@ -1163,12 +1148,10 @@ func TestRequiredAffinityMultipleNodes(t *testing.T) {
 			wantStatuses: []*framework.Status{
 				framework.NewStatus(
 					framework.UnschedulableAndUnresolvable,
-					ErrReasonAffinityNotMatch,
 					ErrReasonAffinityRulesNotMatch,
 				),
 				framework.NewStatus(
 					framework.UnschedulableAndUnresolvable,
-					ErrReasonAffinityNotMatch,
 					ErrReasonAffinityRulesNotMatch,
 				),
 			},
@@ -1200,12 +1183,10 @@ func TestRequiredAffinityMultipleNodes(t *testing.T) {
 			wantStatuses: []*framework.Status{
 				framework.NewStatus(
 					framework.Unschedulable,
-					ErrReasonAffinityNotMatch,
 					ErrReasonAntiAffinityRulesNotMatch,
 				),
 				framework.NewStatus(
 					framework.Unschedulable,
-					ErrReasonAffinityNotMatch,
 					ErrReasonAntiAffinityRulesNotMatch,
 				),
 			},
@@ -1249,12 +1230,10 @@ func TestRequiredAffinityMultipleNodes(t *testing.T) {
 			wantStatuses: []*framework.Status{
 				framework.NewStatus(
 					framework.Unschedulable,
-					ErrReasonAffinityNotMatch,
 					ErrReasonAntiAffinityRulesNotMatch,
 				),
 				framework.NewStatus(
 					framework.Unschedulable,
-					ErrReasonAffinityNotMatch,
 					ErrReasonAntiAffinityRulesNotMatch,
 				),
 			},
@@ -1287,12 +1266,10 @@ func TestRequiredAffinityMultipleNodes(t *testing.T) {
 			wantStatuses: []*framework.Status{
 				framework.NewStatus(
 					framework.Unschedulable,
-					ErrReasonAffinityNotMatch,
 					ErrReasonAntiAffinityRulesNotMatch,
 				),
 				framework.NewStatus(
 					framework.Unschedulable,
-					ErrReasonAffinityNotMatch,
 					ErrReasonAntiAffinityRulesNotMatch,
 				),
 				nil,
@@ -1347,12 +1324,10 @@ func TestRequiredAffinityMultipleNodes(t *testing.T) {
 			wantStatuses: []*framework.Status{
 				framework.NewStatus(
 					framework.Unschedulable,
-					ErrReasonAffinityNotMatch,
 					ErrReasonAntiAffinityRulesNotMatch,
 				),
 				framework.NewStatus(
 					framework.Unschedulable,
-					ErrReasonAffinityNotMatch,
 					ErrReasonAntiAffinityRulesNotMatch,
 				),
 				nil,
@@ -1457,12 +1432,10 @@ func TestRequiredAffinityMultipleNodes(t *testing.T) {
 			wantStatuses: []*framework.Status{
 				framework.NewStatus(
 					framework.Unschedulable,
-					ErrReasonAffinityNotMatch,
 					ErrReasonExistingAntiAffinityRulesNotMatch,
 				),
 				framework.NewStatus(
 					framework.Unschedulable,
-					ErrReasonAffinityNotMatch,
 					ErrReasonExistingAntiAffinityRulesNotMatch,
 				),
 			},
@@ -1515,12 +1488,10 @@ func TestRequiredAffinityMultipleNodes(t *testing.T) {
 			wantStatuses: []*framework.Status{
 				framework.NewStatus(
 					framework.Unschedulable,
-					ErrReasonAffinityNotMatch,
 					ErrReasonAntiAffinityRulesNotMatch,
 				),
 				framework.NewStatus(
 					framework.Unschedulable,
-					ErrReasonAffinityNotMatch,
 					ErrReasonAntiAffinityRulesNotMatch,
 				),
 			},
@@ -1564,7 +1535,6 @@ func TestRequiredAffinityMultipleNodes(t *testing.T) {
 			wantStatuses: []*framework.Status{
 				framework.NewStatus(
 					framework.Unschedulable,
-					ErrReasonAffinityNotMatch,
 					ErrReasonExistingAntiAffinityRulesNotMatch,
 				),
 				nil,
@@ -1615,7 +1585,6 @@ func TestRequiredAffinityMultipleNodes(t *testing.T) {
 			wantStatuses: []*framework.Status{
 				framework.NewStatus(
 					framework.Unschedulable,
-					ErrReasonAffinityNotMatch,
 					ErrReasonAntiAffinityRulesNotMatch,
 				),
 				nil,
@@ -1660,12 +1629,10 @@ func TestRequiredAffinityMultipleNodes(t *testing.T) {
 			wantStatuses: []*framework.Status{
 				framework.NewStatus(
 					framework.Unschedulable,
-					ErrReasonAffinityNotMatch,
 					ErrReasonExistingAntiAffinityRulesNotMatch,
 				),
 				framework.NewStatus(
 					framework.Unschedulable,
-					ErrReasonAffinityNotMatch,
 					ErrReasonExistingAntiAffinityRulesNotMatch,
 				),
 			},
@@ -1712,12 +1679,10 @@ func TestRequiredAffinityMultipleNodes(t *testing.T) {
 			wantStatuses: []*framework.Status{
 				framework.NewStatus(
 					framework.Unschedulable,
-					ErrReasonAffinityNotMatch,
 					ErrReasonAntiAffinityRulesNotMatch,
 				),
 				framework.NewStatus(
 					framework.Unschedulable,
-					ErrReasonAffinityNotMatch,
 					ErrReasonAntiAffinityRulesNotMatch,
 				),
 			},
@@ -1787,12 +1752,10 @@ func TestRequiredAffinityMultipleNodes(t *testing.T) {
 			wantStatuses: []*framework.Status{
 				framework.NewStatus(
 					framework.Unschedulable,
-					ErrReasonAffinityNotMatch,
 					ErrReasonExistingAntiAffinityRulesNotMatch,
 				),
 				framework.NewStatus(
 					framework.Unschedulable,
-					ErrReasonAffinityNotMatch,
 					ErrReasonExistingAntiAffinityRulesNotMatch,
 				),
 				nil,
@@ -1887,12 +1850,10 @@ func TestRequiredAffinityMultipleNodes(t *testing.T) {
 			wantStatuses: []*framework.Status{
 				framework.NewStatus(
 					framework.UnschedulableAndUnresolvable,
-					ErrReasonAffinityNotMatch,
 					ErrReasonAffinityRulesNotMatch,
 				),
 				framework.NewStatus(
 					framework.UnschedulableAndUnresolvable,
-					ErrReasonAffinityNotMatch,
 					ErrReasonAffinityRulesNotMatch,
 				),
 			},
@@ -1907,7 +1868,7 @@ func TestRequiredAffinityMultipleNodes(t *testing.T) {
 			n := func(plArgs runtime.Object, fh framework.Handle) (framework.Plugin, error) {
 				return New(plArgs, fh, feature.Features{})
 			}
-			p := plugintesting.SetupPlugin(ctx, t, n, &config.InterPodAffinityArgs{}, snapshot,
+			p := plugintesting.SetupPluginWithInformers(ctx, t, n, &config.InterPodAffinityArgs{}, snapshot,
 				[]runtime.Object{
 					&v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "NS1"}},
 				})
@@ -1932,10 +1893,13 @@ func TestPreFilterDisabled(t *testing.T) {
 	nodeInfo := framework.NewNodeInfo()
 	node := v1.Node{}
 	nodeInfo.SetNode(&node)
-	p := &InterPodAffinity{}
+	n := func(plArgs runtime.Object, fh framework.Handle) (framework.Plugin, error) {
+		return New(plArgs, fh, feature.Features{})
+	}
+	p := plugintesting.SetupPlugin(t, n, &config.InterPodAffinityArgs{}, cache.NewEmptySnapshot())
 	cycleState := framework.NewCycleState()
-	gotStatus := p.Filter(context.Background(), cycleState, pod, nodeInfo)
-	wantStatus := framework.NewStatus(framework.Error, `error reading "PreFilterInterPodAffinity" from cycleState: not found`)
+	gotStatus := p.(framework.FilterPlugin).Filter(context.Background(), cycleState, pod, nodeInfo)
+	wantStatus := framework.AsStatus(fmt.Errorf(`error reading "PreFilterInterPodAffinity" from cycleState: %w`, framework.ErrNotFound))
 	if !reflect.DeepEqual(gotStatus, wantStatus) {
 		t.Errorf("status does not match: %v, want: %v", gotStatus, wantStatus)
 	}
@@ -2203,7 +2167,7 @@ func TestPreFilterStateAddRemovePod(t *testing.T) {
 				n := func(plArgs runtime.Object, fh framework.Handle) (framework.Plugin, error) {
 					return New(plArgs, fh, feature.Features{})
 				}
-				p := plugintesting.SetupPlugin(ctx, t, n, &config.InterPodAffinityArgs{}, snapshot, nil)
+				p := plugintesting.SetupPlugin(t, n, &config.InterPodAffinityArgs{}, snapshot)
 				cycleState := framework.NewCycleState()
 				preFilterStatus := p.(framework.PreFilterPlugin).PreFilter(ctx, cycleState, test.pendingPod)
 				if !preFilterStatus.IsSuccess() {
@@ -2484,9 +2448,13 @@ func TestGetTPMapMatchingIncomingAffinityAntiAffinity(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := cache.NewSnapshot(tt.existingPods, tt.nodes)
-			l, _ := s.NodeInfos().List()
-			gotAffinityPodsMap, gotAntiAffinityPodsMap := getIncomingAffinityAntiAffinityCounts(framework.NewPodInfo(tt.pod), l, true)
+			snapshot := cache.NewSnapshot(tt.existingPods, tt.nodes)
+			l, _ := snapshot.NodeInfos().List()
+			n := func(plArgs runtime.Object, fh framework.Handle) (framework.Plugin, error) {
+				return New(plArgs, fh, feature.Features{})
+			}
+			p := plugintesting.SetupPlugin(t, n, &config.InterPodAffinityArgs{}, snapshot)
+			gotAffinityPodsMap, gotAntiAffinityPodsMap := p.(*InterPodAffinity).getIncomingAffinityAntiAffinityCounts(framework.NewPodInfo(tt.pod), l, true)
 			if !reflect.DeepEqual(gotAffinityPodsMap, tt.wantAffinityPodsMap) {
 				t.Errorf("getTPMapMatchingIncomingAffinityAntiAffinity() gotAffinityPodsMap = %#v, want %#v", gotAffinityPodsMap, tt.wantAffinityPodsMap)
 			}

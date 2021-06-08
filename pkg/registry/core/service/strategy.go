@@ -32,10 +32,12 @@ import (
 	"k8s.io/kubernetes/pkg/apis/core/validation"
 	"k8s.io/kubernetes/pkg/features"
 	netutil "k8s.io/utils/net"
+	"sigs.k8s.io/structured-merge-diff/v4/fieldpath"
 )
 
 type Strategy interface {
 	rest.RESTCreateUpdateStrategy
+	rest.ResetFieldsStrategy
 }
 
 // svcStrategy implements behavior for Services
@@ -90,6 +92,18 @@ func (svcStrategy) NamespaceScoped() bool {
 	return true
 }
 
+// GetResetFields returns the set of fields that get reset by the strategy
+// and should not be modified by the user.
+func (svcStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
+	fields := map[fieldpath.APIVersion]*fieldpath.Set{
+		"v1": fieldpath.NewSet(
+			fieldpath.MakePathOrDie("status"),
+		),
+	}
+
+	return fields
+}
+
 // PrepareForCreate sets contextual defaults and clears fields that are not allowed to be set by end users on creation.
 func (strategy svcStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	service := obj.(*api.Service)
@@ -119,6 +133,9 @@ func (strategy svcStrategy) Validate(ctx context.Context, obj runtime.Object) fi
 	return allErrs
 }
 
+// WarningsOnCreate returns warnings for the creation of the given object.
+func (svcStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string { return nil }
+
 // Canonicalize normalizes the object after validation.
 func (svcStrategy) Canonicalize(obj runtime.Object) {
 }
@@ -131,6 +148,11 @@ func (strategy svcStrategy) ValidateUpdate(ctx context.Context, obj, old runtime
 	allErrs := validation.ValidateServiceUpdate(obj.(*api.Service), old.(*api.Service))
 	allErrs = append(allErrs, validation.ValidateConditionalService(obj.(*api.Service), old.(*api.Service))...)
 	return allErrs
+}
+
+// WarningsOnUpdate returns warnings for the given update.
+func (svcStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
+	return nil
 }
 
 func (svcStrategy) AllowUnconditionalUpdate() bool {
@@ -151,12 +173,7 @@ func dropServiceDisabledFields(newSvc *api.Service, oldSvc *api.Service) {
 		}
 	}
 
-	// Drop TopologyKeys if ServiceTopology is not enabled
-	if !utilfeature.DefaultFeatureGate.Enabled(features.ServiceTopology) && !topologyKeysInUse(oldSvc) {
-		newSvc.Spec.TopologyKeys = nil
-	}
-
-	// Clear AllocateLoadBalancerNodePorts if ServiceLBNodePortControl if not enabled
+	// Clear AllocateLoadBalancerNodePorts if ServiceLBNodePortControl is not enabled
 	if !utilfeature.DefaultFeatureGate.Enabled(features.ServiceLBNodePortControl) {
 		if !allocateLoadBalancerNodePortsInUse(oldSvc) {
 			newSvc.Spec.AllocateLoadBalancerNodePorts = nil
@@ -180,6 +197,13 @@ func dropServiceDisabledFields(newSvc *api.Service, oldSvc *api.Service) {
 			newSvc.Spec.LoadBalancerClass = nil
 		}
 	}
+
+	// Clear InternalTrafficPolicy if not enabled
+	if !utilfeature.DefaultFeatureGate.Enabled(features.ServiceInternalTrafficPolicy) {
+		if !serviceInternalTrafficPolicyInUse(oldSvc) {
+			newSvc.Spec.InternalTrafficPolicy = nil
+		}
+	}
 }
 
 // returns true if svc.Spec.AllocateLoadBalancerNodePorts field is in use
@@ -201,14 +225,6 @@ func serviceDualStackFieldsInUse(svc *api.Service) bool {
 	ClusterIPsInUse := len(svc.Spec.ClusterIPs) > 1
 
 	return ipFamilyPolicyInUse || ipFamiliesInUse || ClusterIPsInUse
-}
-
-// returns true if svc.Spec.TopologyKeys field is in use
-func topologyKeysInUse(svc *api.Service) bool {
-	if svc == nil {
-		return false
-	}
-	return len(svc.Spec.TopologyKeys) > 0
 }
 
 // returns true when the svc.Status.Conditions field is in use.
@@ -240,6 +256,13 @@ func loadBalancerClassInUse(svc *api.Service) bool {
 	return svc.Spec.LoadBalancerClass != nil
 }
 
+func serviceInternalTrafficPolicyInUse(svc *api.Service) bool {
+	if svc == nil {
+		return false
+	}
+	return svc.Spec.InternalTrafficPolicy != nil
+}
+
 type serviceStatusStrategy struct {
 	Strategy
 }
@@ -247,6 +270,18 @@ type serviceStatusStrategy struct {
 // NewServiceStatusStrategy creates a status strategy for the provided base strategy.
 func NewServiceStatusStrategy(strategy Strategy) Strategy {
 	return serviceStatusStrategy{strategy}
+}
+
+// GetResetFields returns the set of fields that get reset by the strategy
+// and should not be modified by the user.
+func (serviceStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
+	fields := map[fieldpath.APIVersion]*fieldpath.Set{
+		"v1": fieldpath.NewSet(
+			fieldpath.MakePathOrDie("spec"),
+		),
+	}
+
+	return fields
 }
 
 // PrepareForUpdate clears fields that are not allowed to be set by end users on update of status
@@ -260,6 +295,11 @@ func (serviceStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runt
 // ValidateUpdate is the default update validation for an end user updating status
 func (serviceStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	return validation.ValidateServiceStatusUpdate(obj.(*api.Service), old.(*api.Service))
+}
+
+// WarningsOnUpdate returns warnings for the given update.
+func (serviceStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
+	return nil
 }
 
 // NormalizeClusterIPs adjust clusterIPs based on ClusterIP.  This must not

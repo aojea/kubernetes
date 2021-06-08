@@ -106,7 +106,7 @@ var _ = SIGDescribe("Variable Expansion", func() {
 		Testname: VolumeSubpathEnvExpansion, subpath expansion
 		Description: Make sure a container's subpath can be set using an expansion of environment variables.
 	*/
-	framework.ConformanceIt("should allow substituting values in a volume subpath [sig-storage]", func() {
+	framework.ConformanceIt("should allow substituting values in a volume subpath", func() {
 		envVars := []v1.EnvVar{
 			{
 				Name:  "POD_NAME",
@@ -146,7 +146,7 @@ var _ = SIGDescribe("Variable Expansion", func() {
 		Testname: VolumeSubpathEnvExpansion, subpath with backticks
 		Description: Make sure a container's subpath can not be set using an expansion of environment variables when backticks are supplied.
 	*/
-	framework.ConformanceIt("should fail substituting values in a volume subpath with backticks [sig-storage][Slow]", func() {
+	framework.ConformanceIt("should fail substituting values in a volume subpath with backticks [Slow]", func() {
 
 		envVars := []v1.EnvVar{
 			{
@@ -180,7 +180,7 @@ var _ = SIGDescribe("Variable Expansion", func() {
 		Testname: VolumeSubpathEnvExpansion, subpath with absolute path
 		Description: Make sure a container's subpath can not be set using an expansion of environment variables when absolute path is supplied.
 	*/
-	framework.ConformanceIt("should fail substituting values in a volume subpath with absolute path [sig-storage][Slow]", func() {
+	framework.ConformanceIt("should fail substituting values in a volume subpath with absolute path [Slow]", func() {
 		absolutePath := "/tmp"
 		if framework.NodeOSDistroIs("windows") {
 			// Windows does not typically have a C:\tmp folder.
@@ -219,7 +219,7 @@ var _ = SIGDescribe("Variable Expansion", func() {
 		Testname: VolumeSubpathEnvExpansion, subpath ready from failed state
 		Description: Verify that a failing subpath expansion can be modified during the lifecycle of a container.
 	*/
-	framework.ConformanceIt("should verify that a failing subpath expansion can be modified during the lifecycle of a container [sig-storage][Slow]", func() {
+	framework.ConformanceIt("should verify that a failing subpath expansion can be modified during the lifecycle of a container [Slow]", func() {
 
 		envVars := []v1.EnvVar{
 			{
@@ -267,7 +267,10 @@ var _ = SIGDescribe("Variable Expansion", func() {
 
 		ginkgo.By("updating the pod")
 		podClient.Update(pod.ObjectMeta.Name, func(pod *v1.Pod) {
-			pod.ObjectMeta.Annotations = map[string]string{"mysubpath": "mypath"}
+			if pod.ObjectMeta.Annotations == nil {
+				pod.ObjectMeta.Annotations = make(map[string]string)
+			}
+			pod.ObjectMeta.Annotations["mysubpath"] = "mypath"
 		})
 
 		ginkgo.By("waiting for pod running")
@@ -288,7 +291,7 @@ var _ = SIGDescribe("Variable Expansion", func() {
 		3.	successful expansion of the subpathexpr isn't required for volume cleanup
 
 	*/
-	framework.ConformanceIt("should succeed in writing subpaths in container [sig-storage][Slow]", func() {
+	framework.ConformanceIt("should succeed in writing subpaths in container [Slow]", func() {
 
 		envVars := []v1.EnvVar{
 			{

@@ -63,7 +63,11 @@ const (
 	DevicePluginRegistrationCountKey  = "device_plugin_registration_total"
 	DevicePluginAllocationDurationKey = "device_plugin_alloc_duration_seconds"
 	// Metrics keys of pod resources operations
-	PodResourcesEndpointRequestsTotalKey = "pod_resources_endpoint_requests_total"
+	PodResourcesEndpointRequestsTotalKey          = "pod_resources_endpoint_requests_total"
+	PodResourcesEndpointRequestsListKey           = "pod_resources_endpoint_requests_list"
+	PodResourcesEndpointRequestsGetAllocatableKey = "pod_resources_endpoint_requests_get_allocatable"
+	PodResourcesEndpointErrorsListKey             = "pod_resources_endpoint_errors_list"
+	PodResourcesEndpointErrorsGetAllocatableKey   = "pod_resources_endpoint_errors_get_allocatable"
 
 	// Metric keys for node config
 	AssignedConfigKey             = "node_config_assigned"
@@ -293,6 +297,54 @@ var (
 		[]string{"server_api_version"},
 	)
 
+	// PodResourcesEndpointRequestsListCount is a Counter that tracks the number of requests to the PodResource List() endpoint.
+	// Broken down by server API version.
+	PodResourcesEndpointRequestsListCount = metrics.NewCounterVec(
+		&metrics.CounterOpts{
+			Subsystem:      KubeletSubsystem,
+			Name:           PodResourcesEndpointRequestsListKey,
+			Help:           "Number of requests to the PodResource List endpoint. Broken down by server api version.",
+			StabilityLevel: metrics.ALPHA,
+		},
+		[]string{"server_api_version"},
+	)
+
+	// PodResourcesEndpointRequestsGetAllocatableCount is a Counter that tracks the number of requests to the PodResource GetAllocatableResources() endpoint.
+	// Broken down by server API version.
+	PodResourcesEndpointRequestsGetAllocatableCount = metrics.NewCounterVec(
+		&metrics.CounterOpts{
+			Subsystem:      KubeletSubsystem,
+			Name:           PodResourcesEndpointRequestsGetAllocatableKey,
+			Help:           "Number of requests to the PodResource GetAllocatableResources endpoint. Broken down by server api version.",
+			StabilityLevel: metrics.ALPHA,
+		},
+		[]string{"server_api_version"},
+	)
+
+	// PodResourcesEndpointErrorsListCount is a Counter that tracks the number of errors returned by he PodResource List() endpoint.
+	// Broken down by server API version.
+	PodResourcesEndpointErrorsListCount = metrics.NewCounterVec(
+		&metrics.CounterOpts{
+			Subsystem:      KubeletSubsystem,
+			Name:           PodResourcesEndpointErrorsListKey,
+			Help:           "Number of requests to the PodResource List endpoint which returned error. Broken down by server api version.",
+			StabilityLevel: metrics.ALPHA,
+		},
+		[]string{"server_api_version"},
+	)
+
+	// PodResourcesEndpointErrorsGetAllocatableCount is a Counter that tracks the number of errors returned by the PodResource GetAllocatableResources() endpoint.
+	// Broken down by server API version.
+	PodResourcesEndpointErrorsGetAllocatableCount = metrics.NewCounterVec(
+		&metrics.CounterOpts{
+			Subsystem:      KubeletSubsystem,
+			Name:           PodResourcesEndpointErrorsGetAllocatableKey,
+			Help:           "Number of requests to the PodResource GetAllocatableResources endpoint which returned error. Broken down by server api version.",
+			StabilityLevel: metrics.ALPHA,
+		},
+		[]string{"server_api_version"},
+	)
+
 	// Metrics for node config
 
 	// AssignedConfig is a Gauge that is set 1 if the Kubelet has a NodeConfig assigned.
@@ -360,12 +412,13 @@ var (
 		[]string{"runtime_handler"},
 	)
 
-	// RunningPodCount is a gauge that tracks the number of Pods currently running
+	// RunningPodCount is a gauge that tracks the number of Pods currently with a running sandbox
+	// It is used to expose the kubelet internal state: how many pods have running containers in the container runtime, and mainly for debugging purpose.
 	RunningPodCount = metrics.NewGauge(
 		&metrics.GaugeOpts{
 			Subsystem:      KubeletSubsystem,
 			Name:           RunningPodsKey,
-			Help:           "Number of pods currently running",
+			Help:           "Number of pods that have a running pod sandbox",
 			StabilityLevel: metrics.ALPHA,
 		},
 	)

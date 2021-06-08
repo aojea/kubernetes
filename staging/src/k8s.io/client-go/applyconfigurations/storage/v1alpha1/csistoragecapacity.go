@@ -19,9 +19,12 @@ limitations under the License.
 package v1alpha1
 
 import (
+	v1alpha1 "k8s.io/api/storage/v1alpha1"
 	resource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
+	managedfields "k8s.io/apimachinery/pkg/util/managedfields"
+	internal "k8s.io/client-go/applyconfigurations/internal"
 	v1 "k8s.io/client-go/applyconfigurations/meta/v1"
 )
 
@@ -33,6 +36,7 @@ type CSIStorageCapacityApplyConfiguration struct {
 	NodeTopology                     *v1.LabelSelectorApplyConfiguration `json:"nodeTopology,omitempty"`
 	StorageClassName                 *string                             `json:"storageClassName,omitempty"`
 	Capacity                         *resource.Quantity                  `json:"capacity,omitempty"`
+	MaximumVolumeSize                *resource.Quantity                  `json:"maximumVolumeSize,omitempty"`
 }
 
 // CSIStorageCapacity constructs an declarative configuration of the CSIStorageCapacity type for use with
@@ -44,6 +48,42 @@ func CSIStorageCapacity(name, namespace string) *CSIStorageCapacityApplyConfigur
 	b.WithKind("CSIStorageCapacity")
 	b.WithAPIVersion("storage.k8s.io/v1alpha1")
 	return b
+}
+
+// ExtractCSIStorageCapacity extracts the applied configuration owned by fieldManager from
+// cSIStorageCapacity. If no managedFields are found in cSIStorageCapacity for fieldManager, a
+// CSIStorageCapacityApplyConfiguration is returned with only the Name, Namespace (if applicable),
+// APIVersion and Kind populated. Is is possible that no managed fields were found for because other
+// field managers have taken ownership of all the fields previously owned by fieldManager, or because
+// the fieldManager never owned fields any fields.
+// cSIStorageCapacity must be a unmodified CSIStorageCapacity API object that was retrieved from the Kubernetes API.
+// ExtractCSIStorageCapacity provides a way to perform a extract/modify-in-place/apply workflow.
+// Note that an extracted apply configuration will contain fewer fields than what the fieldManager previously
+// applied if another fieldManager has updated or force applied any of the previously applied fields.
+// Experimental!
+func ExtractCSIStorageCapacity(cSIStorageCapacity *v1alpha1.CSIStorageCapacity, fieldManager string) (*CSIStorageCapacityApplyConfiguration, error) {
+	return extractCSIStorageCapacity(cSIStorageCapacity, fieldManager, "")
+}
+
+// ExtractCSIStorageCapacityStatus is the same as ExtractCSIStorageCapacity except
+// that it extracts the status subresource applied configuration.
+// Experimental!
+func ExtractCSIStorageCapacityStatus(cSIStorageCapacity *v1alpha1.CSIStorageCapacity, fieldManager string) (*CSIStorageCapacityApplyConfiguration, error) {
+	return extractCSIStorageCapacity(cSIStorageCapacity, fieldManager, "status")
+}
+
+func extractCSIStorageCapacity(cSIStorageCapacity *v1alpha1.CSIStorageCapacity, fieldManager string, subresource string) (*CSIStorageCapacityApplyConfiguration, error) {
+	b := &CSIStorageCapacityApplyConfiguration{}
+	err := managedfields.ExtractInto(cSIStorageCapacity, internal.Parser().Type("io.k8s.api.storage.v1alpha1.CSIStorageCapacity"), fieldManager, b, subresource)
+	if err != nil {
+		return nil, err
+	}
+	b.WithName(cSIStorageCapacity.Name)
+	b.WithNamespace(cSIStorageCapacity.Namespace)
+
+	b.WithKind("CSIStorageCapacity")
+	b.WithAPIVersion("storage.k8s.io/v1alpha1")
+	return b, nil
 }
 
 // WithKind sets the Kind field in the declarative configuration to the given value
@@ -243,5 +283,13 @@ func (b *CSIStorageCapacityApplyConfiguration) WithStorageClassName(value string
 // If called multiple times, the Capacity field is set to the value of the last call.
 func (b *CSIStorageCapacityApplyConfiguration) WithCapacity(value resource.Quantity) *CSIStorageCapacityApplyConfiguration {
 	b.Capacity = &value
+	return b
+}
+
+// WithMaximumVolumeSize sets the MaximumVolumeSize field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the MaximumVolumeSize field is set to the value of the last call.
+func (b *CSIStorageCapacityApplyConfiguration) WithMaximumVolumeSize(value resource.Quantity) *CSIStorageCapacityApplyConfiguration {
+	b.MaximumVolumeSize = &value
 	return b
 }

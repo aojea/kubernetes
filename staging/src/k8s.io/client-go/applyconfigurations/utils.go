@@ -48,6 +48,7 @@ import (
 	nodev1 "k8s.io/api/node/v1"
 	nodev1alpha1 "k8s.io/api/node/v1alpha1"
 	nodev1beta1 "k8s.io/api/node/v1beta1"
+	policyv1 "k8s.io/api/policy/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	rbacv1alpha1 "k8s.io/api/rbac/v1alpha1"
@@ -90,6 +91,7 @@ import (
 	applyconfigurationsnodev1 "k8s.io/client-go/applyconfigurations/node/v1"
 	applyconfigurationsnodev1alpha1 "k8s.io/client-go/applyconfigurations/node/v1alpha1"
 	applyconfigurationsnodev1beta1 "k8s.io/client-go/applyconfigurations/node/v1beta1"
+	applyconfigurationspolicyv1 "k8s.io/client-go/applyconfigurations/policy/v1"
 	applyconfigurationspolicyv1beta1 "k8s.io/client-go/applyconfigurations/policy/v1beta1"
 	applyconfigurationsrbacv1 "k8s.io/client-go/applyconfigurations/rbac/v1"
 	applyconfigurationsrbacv1alpha1 "k8s.io/client-go/applyconfigurations/rbac/v1alpha1"
@@ -257,6 +259,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &appsv1beta2.RollingUpdateDeploymentApplyConfiguration{}
 	case v1beta2.SchemeGroupVersion.WithKind("RollingUpdateStatefulSetStrategy"):
 		return &appsv1beta2.RollingUpdateStatefulSetStrategyApplyConfiguration{}
+	case v1beta2.SchemeGroupVersion.WithKind("Scale"):
+		return &appsv1beta2.ScaleApplyConfiguration{}
 	case v1beta2.SchemeGroupVersion.WithKind("StatefulSet"):
 		return &appsv1beta2.StatefulSetApplyConfiguration{}
 	case v1beta2.SchemeGroupVersion.WithKind("StatefulSetCondition"):
@@ -277,6 +281,12 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &applyconfigurationsautoscalingv1.HorizontalPodAutoscalerSpecApplyConfiguration{}
 	case autoscalingv1.SchemeGroupVersion.WithKind("HorizontalPodAutoscalerStatus"):
 		return &applyconfigurationsautoscalingv1.HorizontalPodAutoscalerStatusApplyConfiguration{}
+	case autoscalingv1.SchemeGroupVersion.WithKind("Scale"):
+		return &applyconfigurationsautoscalingv1.ScaleApplyConfiguration{}
+	case autoscalingv1.SchemeGroupVersion.WithKind("ScaleSpec"):
+		return &applyconfigurationsautoscalingv1.ScaleSpecApplyConfiguration{}
+	case autoscalingv1.SchemeGroupVersion.WithKind("ScaleStatus"):
+		return &applyconfigurationsautoscalingv1.ScaleStatusApplyConfiguration{}
 
 		// Group=autoscaling, Version=v2beta1
 	case v2beta1.SchemeGroupVersion.WithKind("ContainerResourceMetricSource"):
@@ -777,20 +787,28 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &applyconfigurationsdiscoveryv1.EndpointApplyConfiguration{}
 	case discoveryv1.SchemeGroupVersion.WithKind("EndpointConditions"):
 		return &applyconfigurationsdiscoveryv1.EndpointConditionsApplyConfiguration{}
+	case discoveryv1.SchemeGroupVersion.WithKind("EndpointHints"):
+		return &applyconfigurationsdiscoveryv1.EndpointHintsApplyConfiguration{}
 	case discoveryv1.SchemeGroupVersion.WithKind("EndpointPort"):
 		return &applyconfigurationsdiscoveryv1.EndpointPortApplyConfiguration{}
 	case discoveryv1.SchemeGroupVersion.WithKind("EndpointSlice"):
 		return &applyconfigurationsdiscoveryv1.EndpointSliceApplyConfiguration{}
+	case discoveryv1.SchemeGroupVersion.WithKind("ForZone"):
+		return &applyconfigurationsdiscoveryv1.ForZoneApplyConfiguration{}
 
 		// Group=discovery.k8s.io, Version=v1beta1
 	case discoveryv1beta1.SchemeGroupVersion.WithKind("Endpoint"):
 		return &applyconfigurationsdiscoveryv1beta1.EndpointApplyConfiguration{}
 	case discoveryv1beta1.SchemeGroupVersion.WithKind("EndpointConditions"):
 		return &applyconfigurationsdiscoveryv1beta1.EndpointConditionsApplyConfiguration{}
+	case discoveryv1beta1.SchemeGroupVersion.WithKind("EndpointHints"):
+		return &applyconfigurationsdiscoveryv1beta1.EndpointHintsApplyConfiguration{}
 	case discoveryv1beta1.SchemeGroupVersion.WithKind("EndpointPort"):
 		return &applyconfigurationsdiscoveryv1beta1.EndpointPortApplyConfiguration{}
 	case discoveryv1beta1.SchemeGroupVersion.WithKind("EndpointSlice"):
 		return &applyconfigurationsdiscoveryv1beta1.EndpointSliceApplyConfiguration{}
+	case discoveryv1beta1.SchemeGroupVersion.WithKind("ForZone"):
+		return &applyconfigurationsdiscoveryv1beta1.ForZoneApplyConfiguration{}
 
 		// Group=events.k8s.io, Version=v1
 	case eventsv1.SchemeGroupVersion.WithKind("Event"):
@@ -893,6 +911,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &applyconfigurationsextensionsv1beta1.RunAsUserStrategyOptionsApplyConfiguration{}
 	case extensionsv1beta1.SchemeGroupVersion.WithKind("RuntimeClassStrategyOptions"):
 		return &applyconfigurationsextensionsv1beta1.RuntimeClassStrategyOptionsApplyConfiguration{}
+	case extensionsv1beta1.SchemeGroupVersion.WithKind("Scale"):
+		return &applyconfigurationsextensionsv1beta1.ScaleApplyConfiguration{}
 	case extensionsv1beta1.SchemeGroupVersion.WithKind("SELinuxStrategyOptions"):
 		return &applyconfigurationsextensionsv1beta1.SELinuxStrategyOptionsApplyConfiguration{}
 	case extensionsv1beta1.SchemeGroupVersion.WithKind("SupplementalGroupsStrategyOptions"):
@@ -1118,6 +1138,16 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 	case nodev1beta1.SchemeGroupVersion.WithKind("Scheduling"):
 		return &applyconfigurationsnodev1beta1.SchedulingApplyConfiguration{}
 
+		// Group=policy, Version=v1
+	case policyv1.SchemeGroupVersion.WithKind("Eviction"):
+		return &applyconfigurationspolicyv1.EvictionApplyConfiguration{}
+	case policyv1.SchemeGroupVersion.WithKind("PodDisruptionBudget"):
+		return &applyconfigurationspolicyv1.PodDisruptionBudgetApplyConfiguration{}
+	case policyv1.SchemeGroupVersion.WithKind("PodDisruptionBudgetSpec"):
+		return &applyconfigurationspolicyv1.PodDisruptionBudgetSpecApplyConfiguration{}
+	case policyv1.SchemeGroupVersion.WithKind("PodDisruptionBudgetStatus"):
+		return &applyconfigurationspolicyv1.PodDisruptionBudgetStatusApplyConfiguration{}
+
 		// Group=policy, Version=v1beta1
 	case policyv1beta1.SchemeGroupVersion.WithKind("AllowedCSIDriver"):
 		return &applyconfigurationspolicyv1beta1.AllowedCSIDriverApplyConfiguration{}
@@ -1273,6 +1303,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &applyconfigurationsstoragev1beta1.CSINodeDriverApplyConfiguration{}
 	case storagev1beta1.SchemeGroupVersion.WithKind("CSINodeSpec"):
 		return &applyconfigurationsstoragev1beta1.CSINodeSpecApplyConfiguration{}
+	case storagev1beta1.SchemeGroupVersion.WithKind("CSIStorageCapacity"):
+		return &applyconfigurationsstoragev1beta1.CSIStorageCapacityApplyConfiguration{}
 	case storagev1beta1.SchemeGroupVersion.WithKind("StorageClass"):
 		return &applyconfigurationsstoragev1beta1.StorageClassApplyConfiguration{}
 	case storagev1beta1.SchemeGroupVersion.WithKind("TokenRequest"):

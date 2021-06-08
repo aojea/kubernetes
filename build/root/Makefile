@@ -117,7 +117,7 @@ define VERIFY_HELP_INFO
 # Example:
 #   make verify
 #   make verify BRANCH=branch_x
-#   make verify WHAT="bazel typecheck"
+#   make verify WHAT="gofmt typecheck"
 endef
 .PHONY: verify
 ifeq ($(PRINT_HELP),y)
@@ -437,7 +437,7 @@ define RELEASE_SKIP_TESTS_HELP_INFO
 #   KUBE_RELEASE_RUN_TESTS: Whether to run tests. Set to 'y' to run tests anyways.
 #   KUBE_FASTBUILD: Whether to cross-compile for other architectures. Set to 'false' to do so.
 #   KUBE_DOCKER_REGISTRY: Registry of released images, default to k8s.gcr.io
-#   KUBE_BASE_IMAGE_REGISTRY: Registry of base images for controlplane binaries, default to k8s.gcr.io
+#   KUBE_BASE_IMAGE_REGISTRY: Registry of base images for controlplane binaries, default to k8s.gcr.io/build-image
 #
 # Example:
 #   make release-skip-tests
@@ -487,6 +487,7 @@ ifeq ($(PRINT_HELP),y)
 package package-tarballs:
 	@echo "$$PACKAGE_HELP_INFO"
 else
+package-tarballs: KUBE_BUILD_CONFORMANCE = y
 package package-tarballs:
 	build/package-tarballs.sh
 endif
@@ -506,6 +507,7 @@ ifeq ($(PRINT_HELP),y)
 cross cross-in-a-container:
 	@echo "$$CROSS_HELP_INFO"
 else
+cross cross-in-a-container: KUBE_BUILD_CONFORMANCE = y
 cross:
 	hack/make-rules/cross.sh
 cross-in-a-container: KUBE_OUTPUT_SUBPATH = $(OUT_DIR)/dockerized
@@ -525,12 +527,13 @@ define CMD_HELP_INFO
 endef
 #TODO: make EXCLUDE_TARGET auto-generated when there are other files in cmd/
 EXCLUDE_TARGET=BUILD OWNERS
-.PHONY: $(filter-out %$(EXCLUDE_TARGET),$(notdir $(abspath $(wildcard cmd/*/))))
+CMD_TARGET = $(filter-out %$(EXCLUDE_TARGET),$(notdir $(abspath $(wildcard cmd/*/))))
+.PHONY: $(CMD_TARGET)
 ifeq ($(PRINT_HELP),y)
-$(filter-out %$(EXCLUDE_TARGET),$(notdir $(abspath $(wildcard cmd/*/)))):
+$(CMD_TARGET):
 	@echo "$$CMD_HELP_INFO"
 else
-$(filter-out %$(EXCLUDE_TARGET),$(notdir $(abspath $(wildcard cmd/*/)))): generated_files
+$(CMD_TARGET): generated_files
 	hack/make-rules/build.sh cmd/$@
 endif
 
@@ -562,72 +565,4 @@ help:
 else
 help:
 	hack/make-rules/make-help.sh
-endif
-
-# Non-dockerized bazel rules.
-.PHONY: bazel-build bazel-test bazel-release
-
-ifeq ($(PRINT_HELP),y)
-define BAZEL_BUILD_HELP_INFO
-# Build with bazel
-#
-# Example:
-# make bazel-build
-endef
-bazel-build:
-	@echo "$$BAZEL_BUILD_HELP_INFO"
-else
-# Some things in vendor don't build due to empty target lists for cross-platform rules.
-bazel-build:
-	bazel build -- //... -//vendor/...
-endif
-
-
-ifeq ($(PRINT_HELP),y)
-define BAZEL_TEST_HELP_INFO
-# Test with bazel
-#
-# Example:
-# make bazel-test
-endef
-bazel-test:
-	@echo "$$BAZEL_TEST_HELP_INFO"
-else
-# //hack:verify-all is a manual target.
-# Some things in vendor don't build due to empty target lists for cross-platform rules.
-bazel-test:
-	bazel test --config=unit -- \
-	  //... \
-	  //hack:verify-all \
-	  -//vendor/...
-endif
-
-ifeq ($(PRINT_HELP),y)
-define BAZEL_TEST_INTEGRATION_HELP_INFO
-# Integration test with bazel
-#
-# Example:
-# make bazel-test-integration
-endef
-bazel-test-integration:
-	@echo "$$BAZEL_TEST_INTEGRATION_HELP_INFO"
-else
-bazel-test-integration:
-	bazel test --config integration //test/integration/...
-endif
-
-ifeq ($(PRINT_HELP),y)
-define BAZEL_RELEASE_HELP_INFO
-# Build release tars with bazel
-#
-# Example:
-# make bazel-release
-endef
-bazel-release:
-	@echo "$$BAZEL_RELEASE_HELP_INFO"
-else
-bazel-release:
-	bazel build //build/release-tars
-	bazel shutdown || true
-	pkill ^bazel || true
 endif

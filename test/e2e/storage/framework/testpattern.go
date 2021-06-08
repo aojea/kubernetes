@@ -102,7 +102,7 @@ var (
 	}
 	// DefaultFsGenericEphemeralVolume is TestPattern for "Generic Ephemeral-volume (default fs)"
 	DefaultFsGenericEphemeralVolume = TestPattern{
-		Name:    "Generic Ephemeral-volume (default fs) [Feature:GenericEphemeralVolume]",
+		Name:    "Generic Ephemeral-volume (default fs)",
 		VolType: GenericEphemeralVolume,
 	}
 	// DefaultFsPreprovisionedPV is TestPattern for "Pre-provisioned PV (default fs)"
@@ -134,7 +134,7 @@ var (
 	}
 	// Ext3GenericEphemeralVolume is TestPattern for "Generic Ephemeral-volume (ext3)"
 	Ext3GenericEphemeralVolume = TestPattern{
-		Name:    "Generic Ephemeral-volume (ext3) [Feature:GenericEphemeralVolume]",
+		Name:    "Generic Ephemeral-volume (ext3)",
 		VolType: GenericEphemeralVolume,
 		FsType:  "ext3",
 	}
@@ -167,7 +167,7 @@ var (
 	}
 	// Ext4GenericEphemeralVolume is TestPattern for "Generic Ephemeral-volume (ext4)"
 	Ext4GenericEphemeralVolume = TestPattern{
-		Name:    "Generic Ephemeral-volume (ext4) [Feature:GenericEphemeralVolume]",
+		Name:    "Generic Ephemeral-volume (ext4)",
 		VolType: GenericEphemeralVolume,
 		FsType:  "ext4",
 	}
@@ -179,9 +179,11 @@ var (
 	}
 	// Ext4DynamicPV is TestPattern for "Dynamic PV (ext4)"
 	Ext4DynamicPV = TestPattern{
-		Name:    "Dynamic PV (ext4)",
-		VolType: DynamicPV,
-		FsType:  "ext4",
+		Name:                   "Dynamic PV (ext4)",
+		VolType:                DynamicPV,
+		FsType:                 "ext4",
+		SnapshotType:           DynamicCreatedSnapshot,
+		SnapshotDeletionPolicy: DeleteSnapshot,
 	}
 
 	// Definitions for xfs
@@ -202,7 +204,7 @@ var (
 	}
 	// XfsGenericEphemeralVolume is TestPattern for "Generic Ephemeral-volume (xfs)"
 	XfsGenericEphemeralVolume = TestPattern{
-		Name:       "Generic Ephemeral-volume (xfs) [Feature:GenericEphemeralVolume]",
+		Name:       "Generic Ephemeral-volume (xfs)",
 		VolType:    GenericEphemeralVolume,
 		FsType:     "xfs",
 		FeatureTag: "[Slow]",
@@ -216,10 +218,12 @@ var (
 	}
 	// XfsDynamicPV is TestPattern for "Dynamic PV (xfs)"
 	XfsDynamicPV = TestPattern{
-		Name:       "Dynamic PV (xfs)",
-		VolType:    DynamicPV,
-		FsType:     "xfs",
-		FeatureTag: "[Slow]",
+		Name:                   "Dynamic PV (xfs)",
+		VolType:                DynamicPV,
+		FsType:                 "xfs",
+		FeatureTag:             "[Slow]",
+		SnapshotType:           DynamicCreatedSnapshot,
+		SnapshotDeletionPolicy: DeleteSnapshot,
 	}
 
 	// Definitions for ntfs
@@ -240,7 +244,7 @@ var (
 	}
 	// NtfsGenericEphemeralVolume is TestPattern for "Generic Ephemeral-volume (ntfs)"
 	NtfsGenericEphemeralVolume = TestPattern{
-		Name:       "Generic Ephemeral-volume (ntfs) [Feature:GenericEphemeralVolume]",
+		Name:       "Generic Ephemeral-volume (ntfs)",
 		VolType:    GenericEphemeralVolume,
 		FsType:     "ntfs",
 		FeatureTag: "[Feature:Windows]",
