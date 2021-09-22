@@ -20,13 +20,13 @@ import (
 )
 
 const (
-	magicName = "kubernetes.magic"
+	magicName = "kubernetes.default"
 )
 
 // cache to store API server IP addresses
 type cache struct {
 	client *kubernetes.Clientset
-	config rest.Config
+	config *rest.Config
 
 	host string // URL host from the apiserver
 	port string // port
@@ -42,6 +42,8 @@ type cache struct {
 // to the golang default resolver
 func MagicClient(ctx context.Context, c *rest.Config) (*kubernetes.Clientset, error) {
 	config := *c
+
+	// Get configuration Host and Port for the apiserver
 	host, port, err := getHostPort(config.Host)
 	if err != nil {
 		return nil, err
@@ -54,7 +56,12 @@ func MagicClient(ctx context.Context, c *rest.Config) (*kubernetes.Clientset, er
 	}
 
 	// use our magic name to force the dialer to use our custom resolver
-	config.Host = magicName
+	u, err := url.Parse(c.Host)
+	if err != nil {
+		klog.Fatalf("Error parsing configuration Host URL: %v", err)
+	}
+	u.Host = magicName + ":" + port
+	config.Host = u.String()
 
 	f := &MemResolver{
 		LookupIP: func(ctx context.Context, network, host string) ([]net.IP, error) {
@@ -65,10 +72,10 @@ func MagicClient(ctx context.Context, c *rest.Config) (*kubernetes.Clientset, er
 	// use our resolver on the RESTClient, when the rest client tries to resolve config.Host
 	// it will be resolved by in memory resolver with the apiserver endpoints
 	config.Resolver = NewMemoryResolver(f)
-	r.config = config
+	r.config = &config
 
 	// Create the clientset using the custom resolver
-	client, err := kubernetes.NewForConfig(c)
+	client, err := kubernetes.NewForConfig(&config)
 	if err != nil {
 		return nil, err
 	}
@@ -97,14 +104,17 @@ func (r *cache) lookupIP(ctx context.Context, network, host string) ([]net.IP, e
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	klog.Infof("DEBUG lookupIP network %s host %s", network, host)
 	wantName := strings.TrimSuffix(host, ".")
-	// Use the default resolver if:
-	// - cache is empty
-	// - is not trying to resolve the apiserver
-	if len(r.cache) == 0 ||
-		(wantName != magicName &&
-			wantName != "kubernetes.default") {
+	// Use the default resolver if we are not using magic
+	if wantName != magicName {
 		return net.DefaultResolver.LookupIP(ctx, network, host)
+	}
+
+	// bootstrap problem, magic name will not work if there is nothing in the cache
+	// so we use the original host to resolve
+	if len(r.cache) == 0 {
+		return net.DefaultResolver.LookupIP(ctx, network, r.host)
 	}
 
 	// Favor local, any local IP is fine
@@ -188,12 +198,14 @@ func (r *cache) Start(ctx context.Context) {
 
 func (r *cache) recreateClienset(port int) {
 	klog.Infof("Modifying clienset base URL to use port %d", port)
-	c := r.config
+	// Shallow copy to modify the URL Port
+	c := *r.config
 	u, err := url.Parse(c.Host)
 	if err != nil {
 		klog.Fatalf("Error parsing configuration Host URL: %v", err)
 	}
 	u.Host = magicName + ":" + strconv.Itoa(port)
+	c.Host = u.String()
 	client, err := kubernetes.NewForConfig(&c)
 	if err != nil {
 		klog.Fatalf("Error restoring original clientset: %v", err)
@@ -203,7 +215,7 @@ func (r *cache) recreateClienset(port int) {
 
 func (r *cache) restoreClienset() {
 	klog.Infof("Restoring original client configuration")
-	client, err := kubernetes.NewForConfig(&r.config)
+	client, err := kubernetes.NewForConfig(r.config)
 	if err != nil {
 		klog.Fatalf("Error restoring original clientset: %v", err)
 	}

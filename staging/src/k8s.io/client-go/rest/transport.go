@@ -24,7 +24,6 @@ import (
 	"k8s.io/client-go/pkg/apis/clientauthentication"
 	"k8s.io/client-go/plugin/pkg/client/auth/exec"
 	"k8s.io/client-go/transport"
-	"k8s.io/klog/v2"
 )
 
 // TLSConfigFor returns a tls.Config that will provide the transport level security defined
@@ -112,7 +111,6 @@ func (c *Config) TransportConfig() (*transport.Config, error) {
 		if err := provider.UpdateTransportConfig(conf); err != nil {
 			return nil, err
 		}
-		klog.Info("DEBUG update transport exec")
 	}
 	if c.AuthProvider != nil {
 		provider, err := GetAuthProvider(c.Host, c.AuthProvider, c.AuthConfigPersister)
@@ -120,7 +118,6 @@ func (c *Config) TransportConfig() (*transport.Config, error) {
 			return nil, err
 		}
 		conf.Wrap(provider.WrapTransport)
-		klog.Info("DEBUG update transport auth")
 	}
 	return conf, nil
 }

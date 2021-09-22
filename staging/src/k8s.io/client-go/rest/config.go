@@ -362,7 +362,6 @@ func RESTClientFor(config *Config) (*RESTClient, error) {
 	if err == nil && config.WarningHandler != nil {
 		restClient.warningHandler = config.WarningHandler
 	}
-	klog.Infof("DEBUG creating RESTClientFor for %s %s %v NewTransport: %v", baseURL, versionedAPIPath, clientContent, transport != http.DefaultTransport)
 	return restClient, err
 }
 
@@ -421,7 +420,6 @@ func UnversionedRESTClientFor(config *Config) (*RESTClient, error) {
 	if err == nil && config.WarningHandler != nil {
 		restClient.warningHandler = config.WarningHandler
 	}
-	klog.Infof("DEBUG creating UnversionedRESTClientFor for %s %s %v NewTransport: %v", baseURL, versionedAPIPath, clientContent, transport != http.DefaultTransport)
 	return restClient, err
 }
 

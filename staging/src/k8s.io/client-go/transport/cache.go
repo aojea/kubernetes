@@ -26,7 +26,6 @@ import (
 
 	utilnet "k8s.io/apimachinery/pkg/util/net"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/klog/v2"
 )
 
 // TlsTransportCache caches TLS http.RoundTrippers different configurations. The
@@ -66,9 +65,6 @@ func (c *tlsTransportCache) get(config *Config) (http.RoundTripper, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		klog.Infof("DEBUG Transports cached: %d canCache %v", len(c.transports), canCache)
-	}()
 
 	if canCache {
 		// Ensure we only create a single transport for the given TLS options
@@ -96,7 +92,7 @@ func (c *tlsTransportCache) get(config *Config) (http.RoundTripper, error) {
 		dial = (&net.Dialer{
 			Timeout:   30 * time.Second,
 			KeepAlive: 30 * time.Second,
-			Resolver: config.Resolver,
+			Resolver:  config.Resolver,
 		}).DialContext
 	}
 
