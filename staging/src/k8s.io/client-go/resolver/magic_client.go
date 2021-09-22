@@ -112,9 +112,13 @@ func (r *cache) lookupIP(ctx context.Context, network, host string) ([]net.IP, e
 	}
 
 	// bootstrap problem, magic name will not work if there is nothing in the cache
-	// so we use the original host to resolve
+	// so we use the original host to resolve and initialize the cache
 	if len(r.cache) == 0 {
-		return net.DefaultResolver.LookupIP(ctx, network, r.host)
+		addr, err := net.DefaultResolver.LookupIP(ctx, network, r.host)
+		if err != nil {
+			return nil, err
+		}
+		r.cache = addr
 	}
 
 	// Favor local, any local IP is fine
@@ -140,7 +144,7 @@ func (r *cache) Start(ctx context.Context) {
 	klog.Info("Starting apiserver resolver ...")
 	go func() {
 		// Refresh the cache periodically
-		tick := time.Tick(30 * time.Second)
+		tick := time.Tick(5 * time.Second)
 		errCount := 0
 		for {
 			select {
@@ -155,6 +159,10 @@ func (r *cache) Start(ctx context.Context) {
 						errCount++
 						if errCount > 3 {
 							r.restoreClienset()
+							// clean cache
+							r.mu.Lock()
+							r.cache = []net.IP{}
+							r.mu.Unlock()
 						}
 					}
 					klog.InfoS("Error getting apiserver addresses", "error", err)
@@ -164,6 +172,7 @@ func (r *cache) Start(ctx context.Context) {
 				// and refresh the cache with the new IPs
 				r.mu.Lock()
 				ips := []net.IP{}
+				recreatePort := 0
 				for _, ss := range endpoint.Subsets {
 					for _, e := range ss.Addresses {
 						ips = append(ips, netutils.ParseIPSloppy(e.IP))
@@ -173,7 +182,7 @@ func (r *cache) Start(ctx context.Context) {
 					}
 					if strconv.Itoa(int(ss.Ports[0].Port)) != r.port {
 						if r.preferEndpoints {
-							r.recreateClienset(int(ss.Ports[0].Port))
+							recreatePort = int(ss.Ports[0].Port)
 						} else {
 							klog.Infof("API servers host with different port than endpoints and preferEndpoints disabled" +
 								"the client will not fallback to endpoints")
@@ -183,9 +192,13 @@ func (r *cache) Start(ctx context.Context) {
 				}
 				// if there are no ips we keep previous ones in the cache
 				// if something fails we can still retry against the old ones
+				// this is weird since this means we are connected to one apiserver
 				if len(ips) > 0 {
 					klog.Infof("Got apiserver addresses: %v", ips)
 					r.cache = ips
+				}
+				if recreatePort > 0 {
+					r.recreateClienset(recreatePort)
 				}
 				r.mu.Unlock()
 
@@ -204,17 +217,26 @@ func (r *cache) recreateClienset(port int) {
 	if err != nil {
 		klog.Fatalf("Error parsing configuration Host URL: %v", err)
 	}
-	u.Host = magicName + ":" + strconv.Itoa(port)
+	p := strconv.Itoa(port)
+	u.Host = magicName + ":" + p
 	c.Host = u.String()
 	client, err := kubernetes.NewForConfig(&c)
 	if err != nil {
 		klog.Fatalf("Error restoring original clientset: %v", err)
 	}
+	r.port = p
 	r.client = client
 }
 
 func (r *cache) restoreClienset() {
 	klog.Infof("Restoring original client configuration")
+	// Get configuration Host and Port for the apiserver
+	_, port, err := getHostPort(r.config.Host)
+	if err != nil {
+		klog.Fatalf("Error restoring original clientset: %v", err)
+	}
+	r.port = port
+
 	client, err := kubernetes.NewForConfig(r.config)
 	if err != nil {
 		klog.Fatalf("Error restoring original clientset: %v", err)
