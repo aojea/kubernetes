@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/url"
 	"strconv"
@@ -10,45 +11,50 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	netutils "k8s.io/utils/net"
 )
 
+const (
+	magicName = "kubernetes.magic"
+)
+
 // cache to store API server IP addresses
 type cache struct {
-	mu     sync.Mutex
-	cache  []net.IP // API server IP addresses
-	host   string   // URL host from the apiserver
-	port   string   // port
-	client *rest.RESTClient
+	client *kubernetes.Clientset
+	config rest.Config
+
+	host string // URL host from the apiserver
+	port string // port
+
+	mu    sync.Mutex
+	cache []net.IP // API server IP addresses
+
+	preferEndpoints bool
 }
 
 // APIServerResolver returns a golang resolver that resolves the apiserver IPs
 // based on the published endpoints. If not information is available it falls back
 // to the golang default resolver
-func APIServerResolver(ctx context.Context, c *rest.Config) (*net.Resolver, error) {
+func MagicClient(ctx context.Context, c *rest.Config) (*kubernetes.Clientset, error) {
 	config := *c
-	if err := setConfigDefaults(&config); err != nil {
-		return nil, err
-	}
-	client, err := rest.RESTClientFor(&config)
-	if err != nil {
-		return nil, err
-	}
-	url, err := url.Parse(config.Host)
+	host, port, err := getHostPort(config.Host)
 	if err != nil {
 		return nil, err
 	}
 
+	// Create a resolver that uses the apiserver to resolve the api server endpoints
 	r := &cache{
-		client: client,
-		host:   url.Hostname(),
-		port:   url.Port(),
+		host: host,
+		port: port,
 	}
 
-	r.Start(ctx)
+	// use our magic name to force the dialer to use our custom resolver
+	config.Host = magicName
 
 	f := &MemResolver{
 		LookupIP: func(ctx context.Context, network, host string) ([]net.IP, error) {
@@ -56,7 +62,22 @@ func APIServerResolver(ctx context.Context, c *rest.Config) (*net.Resolver, erro
 		},
 	}
 
-	return NewMemoryResolver(f), nil
+	// use our resolver on the RESTClient, when the rest client tries to resolve config.Host
+	// it will be resolved by in memory resolver with the apiserver endpoints
+	config.Resolver = NewMemoryResolver(f)
+	r.config = config
+
+	// Create the clientset using the custom resolver
+	client, err := kubernetes.NewForConfig(c)
+	if err != nil {
+		return nil, err
+	}
+	r.client = client
+
+	r.preferEndpoints = true
+	r.Start(ctx)
+
+	return r.client, nil
 }
 
 func setConfigDefaults(config *rest.Config) error {
@@ -75,17 +96,14 @@ func setConfigDefaults(config *rest.Config) error {
 func (r *cache) lookupIP(ctx context.Context, network, host string) ([]net.IP, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	wantName := host
-	// fqdn appends a dot
-	if netutils.ParseIPSloppy(host) == nil {
-		wantName = strings.TrimSuffix(host, ".")
-	}
+
+	wantName := strings.TrimSuffix(host, ".")
 	// Use the default resolver if:
 	// - cache is empty
 	// - is not trying to resolve the apiserver
 	if len(r.cache) == 0 ||
-		wantName != r.host ||
-		wantName != "kubernetes.default" {
+		(wantName != magicName &&
+			wantName != "kubernetes.default") {
 		return net.DefaultResolver.LookupIP(ctx, network, host)
 	}
 
@@ -113,20 +131,22 @@ func (r *cache) Start(ctx context.Context) {
 	go func() {
 		// Refresh the cache periodically
 		tick := time.Tick(30 * time.Second)
+		errCount := 0
 		for {
 			select {
 			case <-tick:
 				// apiservers are registered as endpoints of the kubernetes.default service
 				// they are unregistered when they are not healthy or when shutting down
 				// so we don't have to check the healthz or readyz endpoints
-				endpoint := &v1.Endpoints{}
-				err := r.client.Get().
-					Resource("endpoints").
-					Namespace("default").
-					Name("kubernetes").
-					Do(ctx).
-					Into(endpoint)
+				endpoint, err := r.client.CoreV1().Endpoints("default").Get(ctx, "kubernetes", metav1.GetOptions{})
 				if err != nil {
+					if _, ok := err.(net.Error); ok {
+						klog.InfoS("Network error trying to connect to %s:%s %v", r.host, r.port, err)
+						errCount++
+						if errCount > 3 {
+							r.restoreClienset()
+						}
+					}
 					klog.InfoS("Error getting apiserver addresses", "error", err)
 					continue
 				}
@@ -139,9 +159,16 @@ func (r *cache) Start(ctx context.Context) {
 						ips = append(ips, netutils.ParseIPSloppy(e.IP))
 					}
 					if len(ss.Ports) != 1 {
-						klog.Fatalf("Unsupported api servers endpoints with multiple ports")
-					} else if strconv.Itoa(int(ss.Ports[0].Port)) != r.port {
-						klog.Fatalf("Unsupported api servers host with different port")
+						klog.Fatalf("Unsupported API servers endpoints with multiple ports")
+					}
+					if strconv.Itoa(int(ss.Ports[0].Port)) != r.port {
+						if r.preferEndpoints {
+							r.recreateClienset(int(ss.Ports[0].Port))
+						} else {
+							klog.Infof("API servers host with different port than endpoints and preferEndpoints disabled" +
+								"the client will not fallback to endpoints")
+							return
+						}
 					}
 				}
 				// if there are no ips we keep previous ones in the cache
@@ -157,6 +184,30 @@ func (r *cache) Start(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+func (r *cache) recreateClienset(port int) {
+	klog.Infof("Modifying clienset base URL to use port %d", port)
+	c := r.config
+	u, err := url.Parse(c.Host)
+	if err != nil {
+		klog.Fatalf("Error parsing configuration Host URL: %v", err)
+	}
+	u.Host = magicName + ":" + strconv.Itoa(port)
+	client, err := kubernetes.NewForConfig(&c)
+	if err != nil {
+		klog.Fatalf("Error restoring original clientset: %v", err)
+	}
+	r.client = client
+}
+
+func (r *cache) restoreClienset() {
+	klog.Infof("Restoring original client configuration")
+	client, err := kubernetes.NewForConfig(&r.config)
+	if err != nil {
+		klog.Fatalf("Error restoring original clientset: %v", err)
+	}
+	r.client = client
 }
 
 // getLocalAddrs returns a set with all network addresses on the local system
@@ -178,4 +229,24 @@ func getLocalAddressSet() netutils.IPSet {
 		localAddrs.Insert(ip)
 	}
 	return localAddrs
+}
+
+func getHostPort(h string) (string, string, error) {
+	url, err := url.Parse(h)
+	if err != nil {
+		return "", "", err
+	}
+
+	port := url.Port()
+	if port == "" {
+		switch url.Scheme {
+		case "http":
+			port = "80"
+		case "https":
+			port = "443"
+		default:
+			return "", "", fmt.Errorf("Unsupported URL scheme")
+		}
+	}
+	return url.Hostname(), port, nil
 }
