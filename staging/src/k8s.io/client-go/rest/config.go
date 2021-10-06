@@ -323,18 +323,15 @@ func RESTClientFor(config *Config) (*RESTClient, error) {
 		return nil, err
 	}
 
-	var httpClient *http.Client
-	if transport != http.DefaultTransport {
-		httpClient = &http.Client{Transport: transport}
-		if config.Timeout > 0 {
-			httpClient.Timeout = config.Timeout
-		}
+	httpClient := &http.Client{Transport: transport}
+	if config.Timeout > 0 {
+		httpClient.Timeout = config.Timeout
 	}
 
 	return RESTClientForConfigAndClient(config, httpClient)
 }
 
-func RESTClientForConfigAndClient(config *Config,httpClient *http.Client) (*RESTClient, error) {
+func RESTClientForConfigAndClient(config *Config, httpClient *http.Client) (*RESTClient, error) {
 	if config.GroupVersion == nil {
 		return nil, fmt.Errorf("GroupVersion is required when initializing a RESTClient")
 	}
