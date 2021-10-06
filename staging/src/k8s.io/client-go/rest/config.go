@@ -313,7 +313,7 @@ func RESTClientFor(config *Config) (*RESTClient, error) {
 		return nil, fmt.Errorf("NegotiatedSerializer is required when initializing a RESTClient")
 	}
 
-	baseURL, versionedAPIPath, err := defaultServerUrlFor(config)
+	_, _, err := defaultServerUrlFor(config)
 	if err != nil {
 		return nil, err
 	}
@@ -329,6 +329,22 @@ func RESTClientFor(config *Config) (*RESTClient, error) {
 		if config.Timeout > 0 {
 			httpClient.Timeout = config.Timeout
 		}
+	}
+
+	return RESTClientForConfigAndClient(config, httpClient)
+}
+
+func RESTClientForConfigAndClient(config *Config,httpClient *http.Client) (*RESTClient, error) {
+	if config.GroupVersion == nil {
+		return nil, fmt.Errorf("GroupVersion is required when initializing a RESTClient")
+	}
+	if config.NegotiatedSerializer == nil {
+		return nil, fmt.Errorf("NegotiatedSerializer is required when initializing a RESTClient")
+	}
+
+	baseURL, versionedAPIPath, err := defaultServerUrlFor(config)
+	if err != nil {
+		return nil, err
 	}
 
 	rateLimiter := config.RateLimiter
