@@ -78,12 +78,9 @@ func NewForConfig(c *rest.Config) (*Clientset, error) {
 		return nil, err
 	}
 
-	var httpClient *http.Client
-	if transport != http.DefaultTransport {
-		httpClient = &http.Client{Transport: transport}
-		if configShallowCopy.Timeout > 0 {
-			httpClient.Timeout = configShallowCopy.Timeout
-		}
+	httpClient := &http.Client{Transport: transport}
+	if configShallowCopy.Timeout > 0 {
+		httpClient.Timeout = configShallowCopy.Timeout
 	}
 
 	var cs Clientset
