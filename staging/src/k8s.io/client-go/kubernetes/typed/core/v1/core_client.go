@@ -19,6 +19,8 @@ limitations under the License.
 package v1
 
 import (
+	"net/http"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	rest "k8s.io/client-go/rest"
@@ -120,6 +122,19 @@ func NewForConfig(c *rest.Config) (*CoreV1Client, error) {
 		return nil, err
 	}
 	client, err := rest.RESTClientFor(&config)
+	if err != nil {
+		return nil, err
+	}
+	return &CoreV1Client{client}, nil
+}
+
+// NewForConfigAndClient creates a new CoreV1Client for the given config and http client
+func NewForConfigAndClient(c *rest.Config, h *http.Client) (*CoreV1Client, error) {
+	config := *c
+	if err := setConfigDefaults(&config); err != nil {
+		return nil, err
+	}
+	client, err := rest.RESTClientForConfigAndClient(&config, h)
 	if err != nil {
 		return nil, err
 	}

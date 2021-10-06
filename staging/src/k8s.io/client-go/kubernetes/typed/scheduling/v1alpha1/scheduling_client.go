@@ -19,6 +19,8 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"net/http"
+
 	v1alpha1 "k8s.io/api/scheduling/v1alpha1"
 	"k8s.io/client-go/kubernetes/scheme"
 	rest "k8s.io/client-go/rest"
@@ -45,6 +47,19 @@ func NewForConfig(c *rest.Config) (*SchedulingV1alpha1Client, error) {
 		return nil, err
 	}
 	client, err := rest.RESTClientFor(&config)
+	if err != nil {
+		return nil, err
+	}
+	return &SchedulingV1alpha1Client{client}, nil
+}
+
+// NewForConfigAndClient creates a new SchedulingV1alpha1Client for the given config and http client
+func NewForConfigAndClient(c *rest.Config, h *http.Client) (*SchedulingV1alpha1Client, error) {
+	config := *c
+	if err := setConfigDefaults(&config); err != nil {
+		return nil, err
+	}
+	client, err := rest.RESTClientForConfigAndClient(&config, h)
 	if err != nil {
 		return nil, err
 	}

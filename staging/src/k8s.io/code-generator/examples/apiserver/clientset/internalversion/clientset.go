@@ -20,6 +20,7 @@ package internalversion
 
 import (
 	"fmt"
+	"net/http"
 
 	discovery "k8s.io/client-go/discovery"
 	rest "k8s.io/client-go/rest"
@@ -79,17 +80,30 @@ func NewForConfig(c *rest.Config) (*Clientset, error) {
 		}
 		configShallowCopy.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(configShallowCopy.QPS, configShallowCopy.Burst)
 	}
+	// share the transport between all clients
+	transport, err := rest.TransportFor(&configShallowCopy)
+	if err != nil {
+		return nil, err
+	}
+
+	var httpClient *http.Client
+	if transport != http.DefaultTransport {
+		httpClient = &http.Client{Transport: transport}
+		if configShallowCopy.Timeout > 0 {
+			httpClient.Timeout = configShallowCopy.Timeout
+		}
+	}
+
 	var cs Clientset
-	var err error
-	cs.example, err = exampleinternalversion.NewForConfig(&configShallowCopy)
+	cs.example, err = exampleinternalversion.NewForConfigAndClient(&configShallowCopy, httpClient)
 	if err != nil {
 		return nil, err
 	}
-	cs.secondExample, err = secondexampleinternalversion.NewForConfig(&configShallowCopy)
+	cs.secondExample, err = secondexampleinternalversion.NewForConfigAndClient(&configShallowCopy, httpClient)
 	if err != nil {
 		return nil, err
 	}
-	cs.thirdExample, err = thirdexampleinternalversion.NewForConfig(&configShallowCopy)
+	cs.thirdExample, err = thirdexampleinternalversion.NewForConfigAndClient(&configShallowCopy, httpClient)
 	if err != nil {
 		return nil, err
 	}
@@ -104,13 +118,11 @@ func NewForConfig(c *rest.Config) (*Clientset, error) {
 // NewForConfigOrDie creates a new Clientset for the given config and
 // panics if there is an error in the config.
 func NewForConfigOrDie(c *rest.Config) *Clientset {
-	var cs Clientset
-	cs.example = exampleinternalversion.NewForConfigOrDie(c)
-	cs.secondExample = secondexampleinternalversion.NewForConfigOrDie(c)
-	cs.thirdExample = thirdexampleinternalversion.NewForConfigOrDie(c)
-
-	cs.DiscoveryClient = discovery.NewDiscoveryClientForConfigOrDie(c)
-	return &cs
+	cs, err := NewForConfig(c)
+	if err != nil {
+		panic(err)
+	}
+	return cs
 }
 
 // New creates a new Clientset for the given RESTClient.

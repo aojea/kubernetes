@@ -19,6 +19,8 @@ limitations under the License.
 package v1
 
 import (
+	"net/http"
+
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/scheme"
 	rest "k8s.io/client-go/rest"
@@ -45,6 +47,19 @@ func NewForConfig(c *rest.Config) (*ApiextensionsV1Client, error) {
 		return nil, err
 	}
 	client, err := rest.RESTClientFor(&config)
+	if err != nil {
+		return nil, err
+	}
+	return &ApiextensionsV1Client{client}, nil
+}
+
+// NewForConfigAndClient creates a new ApiextensionsV1Client for the given config and http client
+func NewForConfigAndClient(c *rest.Config, h *http.Client) (*ApiextensionsV1Client, error) {
+	config := *c
+	if err := setConfigDefaults(&config); err != nil {
+		return nil, err
+	}
+	client, err := rest.RESTClientForConfigAndClient(&config, h)
 	if err != nil {
 		return nil, err
 	}

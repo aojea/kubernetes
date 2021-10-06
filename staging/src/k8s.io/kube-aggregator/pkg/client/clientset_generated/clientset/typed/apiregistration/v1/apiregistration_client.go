@@ -19,6 +19,8 @@ limitations under the License.
 package v1
 
 import (
+	"net/http"
+
 	rest "k8s.io/client-go/rest"
 	v1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 	"k8s.io/kube-aggregator/pkg/client/clientset_generated/clientset/scheme"
@@ -45,6 +47,19 @@ func NewForConfig(c *rest.Config) (*ApiregistrationV1Client, error) {
 		return nil, err
 	}
 	client, err := rest.RESTClientFor(&config)
+	if err != nil {
+		return nil, err
+	}
+	return &ApiregistrationV1Client{client}, nil
+}
+
+// NewForConfigAndClient creates a new ApiregistrationV1Client for the given config and http client
+func NewForConfigAndClient(c *rest.Config, h *http.Client) (*ApiregistrationV1Client, error) {
+	config := *c
+	if err := setConfigDefaults(&config); err != nil {
+		return nil, err
+	}
+	client, err := rest.RESTClientForConfigAndClient(&config, h)
 	if err != nil {
 		return nil, err
 	}

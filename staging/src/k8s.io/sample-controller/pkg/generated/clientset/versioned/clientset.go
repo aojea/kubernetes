@@ -20,6 +20,7 @@ package versioned
 
 import (
 	"fmt"
+	"net/http"
 
 	discovery "k8s.io/client-go/discovery"
 	rest "k8s.io/client-go/rest"
@@ -63,9 +64,22 @@ func NewForConfig(c *rest.Config) (*Clientset, error) {
 		}
 		configShallowCopy.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(configShallowCopy.QPS, configShallowCopy.Burst)
 	}
+	// share the transport between all clients
+	transport, err := rest.TransportFor(&configShallowCopy)
+	if err != nil {
+		return nil, err
+	}
+
+	var httpClient *http.Client
+	if transport != http.DefaultTransport {
+		httpClient = &http.Client{Transport: transport}
+		if configShallowCopy.Timeout > 0 {
+			httpClient.Timeout = configShallowCopy.Timeout
+		}
+	}
+
 	var cs Clientset
-	var err error
-	cs.samplecontrollerV1alpha1, err = samplecontrollerv1alpha1.NewForConfig(&configShallowCopy)
+	cs.samplecontrollerV1alpha1, err = samplecontrollerv1alpha1.NewForConfigAndClient(&configShallowCopy, httpClient)
 	if err != nil {
 		return nil, err
 	}
@@ -80,11 +94,11 @@ func NewForConfig(c *rest.Config) (*Clientset, error) {
 // NewForConfigOrDie creates a new Clientset for the given config and
 // panics if there is an error in the config.
 func NewForConfigOrDie(c *rest.Config) *Clientset {
-	var cs Clientset
-	cs.samplecontrollerV1alpha1 = samplecontrollerv1alpha1.NewForConfigOrDie(c)
-
-	cs.DiscoveryClient = discovery.NewDiscoveryClientForConfigOrDie(c)
-	return &cs
+	cs, err := NewForConfig(c)
+	if err != nil {
+		panic(err)
+	}
+	return cs
 }
 
 // New creates a new Clientset for the given RESTClient.

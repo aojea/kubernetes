@@ -19,6 +19,8 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"net/http"
+
 	rest "k8s.io/client-go/rest"
 	v1alpha1 "k8s.io/metrics/pkg/apis/metrics/v1alpha1"
 	"k8s.io/metrics/pkg/client/clientset/versioned/scheme"
@@ -50,6 +52,19 @@ func NewForConfig(c *rest.Config) (*MetricsV1alpha1Client, error) {
 		return nil, err
 	}
 	client, err := rest.RESTClientFor(&config)
+	if err != nil {
+		return nil, err
+	}
+	return &MetricsV1alpha1Client{client}, nil
+}
+
+// NewForConfigAndClient creates a new MetricsV1alpha1Client for the given config and http client
+func NewForConfigAndClient(c *rest.Config, h *http.Client) (*MetricsV1alpha1Client, error) {
+	config := *c
+	if err := setConfigDefaults(&config); err != nil {
+		return nil, err
+	}
+	client, err := rest.RESTClientForConfigAndClient(&config, h)
 	if err != nil {
 		return nil, err
 	}

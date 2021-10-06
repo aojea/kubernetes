@@ -19,6 +19,8 @@ limitations under the License.
 package v1
 
 import (
+	"net/http"
+
 	rest "k8s.io/client-go/rest"
 	v1 "k8s.io/code-generator/examples/MixedCase/apis/example/v1"
 	"k8s.io/code-generator/examples/MixedCase/clientset/versioned/scheme"
@@ -50,6 +52,19 @@ func NewForConfig(c *rest.Config) (*ExampleV1Client, error) {
 		return nil, err
 	}
 	client, err := rest.RESTClientFor(&config)
+	if err != nil {
+		return nil, err
+	}
+	return &ExampleV1Client{client}, nil
+}
+
+// NewForConfigAndClient creates a new ExampleV1Client for the given config and http client
+func NewForConfigAndClient(c *rest.Config, h *http.Client) (*ExampleV1Client, error) {
+	config := *c
+	if err := setConfigDefaults(&config); err != nil {
+		return nil, err
+	}
+	client, err := rest.RESTClientForConfigAndClient(&config, h)
 	if err != nil {
 		return nil, err
 	}
