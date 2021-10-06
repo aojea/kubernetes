@@ -47,11 +47,7 @@ func main() {
 		panic(err.Error())
 	}
 
-	// create the clientset
-	// we need a context since this client spawns a goroutine
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	clientset, err := resolver.MagicClient(ctx, config)
+	clientset, err := resolver.NewClientsetWithResolver(config)
 	if err != nil {
 		panic(err.Error())
 	}

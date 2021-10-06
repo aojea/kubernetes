@@ -12,9 +12,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilnet "k8s.io/apimachinery/pkg/util/net"
-	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/resolver/dns"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
@@ -42,10 +42,11 @@ type resolver struct {
 	// time after the cache entries are considered stale and pruned
 	timeout time.Duration
 	// RESTclient configuration
-	client *rest.RESTClient
+	client *kubernetes.Clientset
 }
 
-// NewResolver returns an in memory net.Resolver that resolves the API server
+// NewClientsetWithResolver returns a Kubernetes Clientset with an in memory
+// net.Resolver that resolves the API server.
 // Host name with the addresses obtained from the API server published Endpoints
 // resources.
 // The resolver polls periodically the API server to refresh the local cache.
@@ -55,19 +56,15 @@ type resolver struct {
 //   is not an IP address or is resolved via /etc/hosts.
 // - The configured API server URL has a different port
 //   than the one used in the Endpoints.
-func NewResolver(ctx context.Context, c *rest.Config, options ...ResolverOption) (*net.Resolver, error) {
+func NewClientsetWithResolver(c *rest.Config, options ...ResolverOption) (*kubernetes.Clientset, error) {
 	config := *c
-	if err := setConfigDefaults(&config); err != nil {
-		return nil, err
-	}
-
 	host, port, err := getHostPort(config.Host)
 	if err != nil {
 		return nil, err
 	}
 
 	if netutils.ParseIPSloppy(host) != nil {
-		return net.DefaultResolver, fmt.Errorf("APIServerResolver only works for domain names")
+		return nil, fmt.Errorf("APIServerResolver only works for domain names")
 	}
 
 	// defaulting
@@ -89,33 +86,16 @@ func NewResolver(ctx context.Context, c *rest.Config, options ...ResolverOption)
 	}
 
 	resolver := dns.NewMemoryResolver(f)
-	config.Resolver = resolver
+	config.Dial = (&net.Dialer{
+		Resolver: resolver,
+	}).DialContext
 
-	client, err := rest.RESTClientFor(&config)
+	client, err := kubernetes.NewForConfig(&config)
 	if err != nil {
 		return nil, err
 	}
-
 	r.client = client
-	// Initialize cache and close idle connections so next connections goes
-	// directly to one of the API server IPs, this is useful for cases
-	// that use a load balancer for bootstrapping
-	r.refreshCache(ctx)
-	utilnet.CloseIdleConnectionsFor(r.client.Client.Transport)
-	return resolver, nil
-}
-
-func setConfigDefaults(config *rest.Config) error {
-	gv := v1.SchemeGroupVersion
-	config.GroupVersion = &gv
-	config.APIPath = "/api"
-	config.NegotiatedSerializer = scheme.Codecs.WithoutConversion()
-
-	if config.UserAgent == "" {
-		config.UserAgent = rest.DefaultKubernetesUserAgent()
-	}
-
-	return nil
+	return r.client, nil
 }
 
 func (r *resolver) lookupIP(ctx context.Context, network, host string) ([]net.IP, error) {
@@ -134,10 +114,16 @@ func (r *resolver) lookupIP(ctx context.Context, network, host string) ([]net.IP
 		if err != nil {
 			return addrs, err
 		}
-		// don't try to renew the cache until we know it's possible
-		if len(addrs) > 0 {
+		// we were able to resolve the IP with the default resolver
+		// try to update the cache, but check this is not a recursive call
+		if len(addrs) > 0 && atomic.LoadInt32(&r.refreshing) == 0 {
 			klog.V(7).Infof("Resolver Trace: refreshing cache for first time for host %s", host)
-			go r.refreshCache(ctx)
+			go func() {
+				// avoid multiple refresh queries in parallel
+				atomic.StoreInt32(&r.refreshing, 1)
+				defer atomic.StoreInt32(&r.refreshing, 0)
+				r.refreshCache()
+			}()
 		}
 		return addrs, nil
 	}
@@ -158,7 +144,7 @@ func (r *resolver) lookupIP(ctx context.Context, network, host string) ([]net.IP
 				// avoid multiple refresh queries in parallel
 				atomic.StoreInt32(&r.refreshing, 1)
 				defer atomic.StoreInt32(&r.refreshing, 0)
-				r.refreshCache(ctx)
+				r.refreshCache()
 			}()
 		}
 	}
@@ -178,26 +164,22 @@ func (r *resolver) lookupIP(ctx context.Context, network, host string) ([]net.IP
 // or is not able to reply, it shuffles the IPs so it will retry randomly.
 // If there are no errors, local IP addresses are returned first, so it
 // favors direct connectivity.
-func (r *resolver) refreshCache(ctx context.Context) {
+func (r *resolver) refreshCache() {
 	// Kubernetes conformance clusters require: The cluster MUST have a service
 	// named "kubernetes" on the default namespace referencing the API servers.
 	// The "kubernetes.default" service MUST have Endpoints and EndpointSlices
 	// pointing to each API server instance.
 	// Endpoints managed by API servers are removed if they API server is not ready.
-	endpoint := &v1.Endpoints{}
-	err := r.client.Get().
-		Resource("endpoints").
-		Namespace("default").
-		Name("kubernetes").
-		Do(ctx).
-		Into(endpoint)
-	// error handling
+	// Initialize cache
+	b, err := r.client.RESTClient().Get().AbsPath("/healthz").Do(context.TODO()).Raw()
+	if err != nil {
+		klog.Errorf("error checking /healthz: %v\n%s\n", err, string(b))
+		return
+	}
+
+	endpoint, err := r.client.CoreV1().Endpoints("default").Get(context.TODO(), "kubernetes", metav1.GetOptions{})
 	if err != nil {
 		klog.V(7).Infof("Resolver Trace: error getting apiserver addresses from Endpoints: %v", err)
-		// nothing to do here, continue
-		if len(r.cache) == 0 {
-			return
-		}
 		stale := false
 		if !r.lastContact.IsZero() {
 			stale = time.Now().After(r.lastContact.Add(r.timeout))
@@ -205,12 +187,15 @@ func (r *resolver) refreshCache(ctx context.Context) {
 		// give up if there are errors and we could not renew the entries during the specified timeout
 		if stale {
 			klog.V(7).Infof("Resolver Trace: falling back to default resolver, too many errors to connect to %s:%s on %v : %v", r.host, r.port, r.cache, err)
+			// clean the cache and exit
 			r.mu.Lock()
-			r.cache = []net.IP{}
+			r.populateCache([]net.IP{}, false)
 			r.mu.Unlock()
 		}
 		return
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	// Get IPs from the Endpoint.
 	ips := []net.IP{}
 	for _, ss := range endpoint.Subsets {
@@ -221,24 +206,34 @@ func (r *resolver) refreshCache(ctx context.Context) {
 		// - API Server with multiple endpoints
 		// - Configured URL and Endpoints with different ports
 		if len(ss.Ports) != 1 || strconv.Itoa(int(ss.Ports[0].Port)) != r.port {
-			r.mu.Lock()
-			r.cache = []net.IP{}
-			r.lastContact = time.Time{}
-			r.mu.Unlock()
+			// clean the cache and exit
+			r.populateCache([]net.IP{}, true)
 			return
 		}
 	}
-	// Do nothing if there are no IPs published.
+	r.populateCache(ips, true)
+
+	return
+}
+
+// populate cache inserts the IPs in the cache
+// assuming the lock is held
+func (r *resolver) populateCache(ips []net.IP, preferLocal bool) {
+	klog.V(7).Infof("Resolver Trace: Update cache with %v", ips)
+	// clear the pool so next connection uses the cache
+	defer r.resetConnection()
+	// reset the lastContact timestamp since we are going to refresh the cache
+	r.lastContact = time.Time{}
+
+	// Clear the cache
 	if len(ips) == 0 {
+		r.cache = []net.IP{}
 		return
 	}
 
 	// Update the cache and exit (optimize for one IP)
 	if len(ips) == 1 {
-		r.mu.Lock()
 		r.cache = []net.IP{ips[0]}
-		r.lastContact = time.Time{}
-		r.mu.Unlock()
 		return
 	}
 
@@ -246,23 +241,37 @@ func (r *resolver) refreshCache(ctx context.Context) {
 	rand.Shuffle(len(ips), func(i, j int) {
 		ips[i], ips[j] = ips[j], ips[i]
 	})
-	// Favor local, returning it first because dialParallel races two copies of
-	// dialSerial, giving the first a head start. It returns the first
-	// established connection and closes the others.
-	localAddresses := getLocalAddressSet()
-	for _, ip := range ips {
-		if localAddresses.Has(ip) {
-			moveToFront(ip, ips)
-			break
+
+	if preferLocal {
+		// Favor local, returning it first because dialParallel races two copies of
+		// dialSerial, giving the first a head start. It returns the first
+		// established connection and closes the others.
+		localAddresses := getLocalAddressSet()
+		for _, ip := range ips {
+			if localAddresses.Has(ip) {
+				moveToFront(ip, ips)
+				break
+			}
 		}
 	}
 
-	r.mu.Lock()
 	r.cache = make([]net.IP, len(ips))
 	copy(r.cache, ips)
-	r.lastContact = time.Time{}
-	r.mu.Unlock()
 	return
+}
+
+// resetConnection clear the Transport Idle connections from the pool
+// forcing the subsequent connection to query DNS and use the cache addresses
+func (r *resolver) resetConnection() {
+	// This is tricky, we need access to the transport (that is shared by all the consumers)
+	t, ok := r.client.RESTClient().(*rest.RESTClient)
+	if !ok {
+		klog.Errorf("Unable to get restClient from transport")
+	}
+	// Closing all idle connections we "force" the next connection to query the DNS
+	// that at this point will have the entries with the apiserver IPs
+	// consequently, next connection will use the cache to reach the apiserver
+	utilnet.CloseIdleConnectionsFor(t.Client.Transport)
 }
 
 // getHostPort returns the host and port from an URL defaulting http and https ports
