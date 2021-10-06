@@ -77,6 +77,7 @@ func (g *genClientset) GenerateType(c *generator.Context, t *types.Type, w io.Wr
 		"Config":                               c.Universe.Type(types.Name{Package: "k8s.io/client-go/rest", Name: "Config"}),
 		"DefaultKubernetesUserAgent":           c.Universe.Function(types.Name{Package: "k8s.io/client-go/rest", Name: "DefaultKubernetesUserAgent"}),
 		"RESTClientInterface":                  c.Universe.Type(types.Name{Package: "k8s.io/client-go/rest", Name: "Interface"}),
+		"RESTTransportFor":                     c.Universe.Function(types.Name{Package: "k8s.io/client-go/rest", Name: "TransportFor"}),
 		"DiscoveryInterface":                   c.Universe.Type(types.Name{Package: "k8s.io/client-go/discovery", Name: "DiscoveryInterface"}),
 		"DiscoveryClient":                      c.Universe.Type(types.Name{Package: "k8s.io/client-go/discovery", Name: "DiscoveryClient"}),
 		"NewDiscoveryClientForConfig":          c.Universe.Function(types.Name{Package: "k8s.io/client-go/discovery", Name: "NewDiscoveryClientForConfig"}),
@@ -144,9 +145,22 @@ func NewForConfig(c *$.Config|raw$) (*Clientset, error) {
 		}
 		configShallowCopy.RateLimiter = $.flowcontrolNewTokenBucketRateLimiter|raw$(configShallowCopy.QPS, configShallowCopy.Burst)
 	}
+	// share the transport between all clients
+	transport, err := $.RESTTransportFor|raw$(&configShallowCopy)
+	if err != nil {
+		return nil, err
+	}
+
+	var httpClient *http.Client
+	if transport != http.DefaultTransport {
+		httpClient = &http.Client{Transport: transport}
+		if configShallowCopy.Timeout > 0 {
+			httpClient.Timeout = configShallowCopy.Timeout
+		}
+	}
+
 	var cs Clientset
-	var err error
-$range .allGroups$    cs.$.LowerCaseGroupGoName$$.Version$, err =$.PackageAlias$.NewForConfig(&configShallowCopy)
+$range .allGroups$    cs.$.LowerCaseGroupGoName$$.Version$, err =$.PackageAlias$.NewForConfigAndClient(&configShallowCopy, httpClient)
 	if err!=nil {
 		return nil, err
 	}
@@ -163,11 +177,11 @@ var newClientsetForConfigOrDieTemplate = `
 // NewForConfigOrDie creates a new Clientset for the given config and
 // panics if there is an error in the config.
 func NewForConfigOrDie(c *$.Config|raw$) *Clientset {
-	var cs Clientset
-$range .allGroups$    cs.$.LowerCaseGroupGoName$$.Version$ =$.PackageAlias$.NewForConfigOrDie(c)
-$end$
-	cs.DiscoveryClient = $.NewDiscoveryClientForConfigOrDie|raw$(c)
-	return &cs
+	cs, err := NewForConfig(c)
+	if err!=nil {
+		panic(err)
+	}
+	return cs
 }
 `
 
