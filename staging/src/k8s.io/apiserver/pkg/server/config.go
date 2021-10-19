@@ -809,6 +809,7 @@ func DefaultBuildHandlerChain(apiHandler http.Handler, c *Config) http.Handler {
 	handler = genericapifilters.WithRequestReceivedTimestamp(handler)
 	handler = genericfilters.WithPanicRecovery(handler, c.RequestInfoResolver)
 	handler = genericapifilters.WithAuditID(handler)
+	handler = genericfilters.WithAternativeServices(handler, c.LoopbackClientConfig)
 	return handler
 }
 
