@@ -65,6 +65,7 @@ func HTTPWrappersForConfig(config *Config, rt http.RoundTripper) (http.RoundTrip
 		len(config.Impersonate.Extra) > 0 {
 		rt = NewImpersonatingRoundTripper(config.Impersonate, rt)
 	}
+	rt = NewAltSvcRoundTripper(rt)
 	return rt, nil
 }
 
