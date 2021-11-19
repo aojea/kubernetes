@@ -125,6 +125,8 @@ func (cm *ClientManager) HookClient(cc ClientConfig) (*rest.RESTClient, error) {
 		return nil, err
 	}
 	if client, ok := cm.cache.Get(string(cacheKey)); ok {
+		klog.Infof("CAAAAAAAAAAAAAAAAACCCCCCCCCCCCCCCCHE->>>DEBUG HookClient name: %s url: %s, service: %+v", cc.Name, cc.URL, cc.Service)
+		utilnet.CloseIdleConnectionsFor(client.(*rest.RESTClient).Client.Transport)
 		return client.(*rest.RESTClient), nil
 	}
 
@@ -146,7 +148,7 @@ func (cm *ClientManager) HookClient(cc ClientConfig) (*rest.RESTClient, error) {
 
 		cfg.ContentConfig.NegotiatedSerializer = cm.negotiatedSerializer
 		cfg.ContentConfig.ContentType = runtime.ContentTypeJSON
-
+		// cfg.NextProtos = []string{"http/1.1"}
 		// Add a transport wrapper that allows detection of TLS connections to
 		// servers without SAN extension in their serving certificates
 		cfg.Wrap(x509metrics.NewMissingSANRoundTripperWrapperConstructor(x509MissingSANCounter))

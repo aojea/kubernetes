@@ -35,6 +35,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer/json"
 	utiljson "k8s.io/apimachinery/pkg/util/json"
+	utilnet "k8s.io/apimachinery/pkg/util/net"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apiserver/pkg/admission"
 	admissionmetrics "k8s.io/apiserver/pkg/admission/metrics"
@@ -233,6 +234,8 @@ func (a *mutatingDispatcher) callAttrMutatingHook(ctx context.Context, h *admiss
 	if err != nil {
 		return false, &webhookutil.ErrCallingWebhook{WebhookName: h.Name, Reason: fmt.Errorf("could not get REST client: %w", err), Status: apierrors.NewBadRequest("error getting REST client")}
 	}
+	utilnet.CloseIdleConnectionsFor(client.Client.Transport)
+
 	trace := utiltrace.New("Call mutating webhook",
 		utiltrace.Field{"configuration", configurationName},
 		utiltrace.Field{"webhook", h.Name},

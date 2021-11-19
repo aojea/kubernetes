@@ -112,10 +112,7 @@ var _ = SIGDescribe("Events", func() {
 		ginkgo.By("checking for kubelet event about the pod")
 		framework.ExpectNoError(wait.Poll(framework.Poll, 5*time.Minute, func() (bool, error) {
 			selector := fields.Set{
-				"involvedObject.uid":       string(podWithUID.UID),
-				"involvedObject.kind":      "Pod",
-				"involvedObject.namespace": f.Namespace.Name,
-				"source":                   "kubelet",
+				"source": "kubelet",
 			}.AsSelector().String()
 			options := metav1.ListOptions{FieldSelector: selector}
 			events, err = f.ClientSet.CoreV1().Events(f.Namespace.Name).List(context.TODO(), options)

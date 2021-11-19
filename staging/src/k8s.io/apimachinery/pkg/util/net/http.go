@@ -251,6 +251,7 @@ func CloseIdleConnectionsFor(transport http.RoundTripper) {
 		CloseIdleConnections()
 	}
 
+	fmt.Println("DEBUGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG")
 	switch transport := transport.(type) {
 	case closeIdler:
 		transport.CloseIdleConnections()

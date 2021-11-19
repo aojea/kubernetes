@@ -204,6 +204,14 @@ func TestWebhookLoadBalance(t *testing.T) {
 	}
 	wg.Wait()
 
+	for i := 0; i < 100; i++ {
+		_, err := client.CoreV1().Pods(ns).Create(context.TODO(), pod(), metav1.CreateOptions{})
+		if err != nil {
+			t.Error(err)
+		}
+		time.Sleep(1 * time.Second)
+	}
+
 	if actual := atomic.LoadInt64(&trackingListener.connections); actual > 0 {
 		t.Errorf("expected no additional connections (reusing kept-alive connections), got %d", actual)
 	}
@@ -243,7 +251,7 @@ func newLoadBalanceWebhookHandler(recorder *connectionRecorder) http.Handler {
 		})
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println(r.Proto)
+		fmt.Println("DEBUG ---------------->", r.Proto, r.RemoteAddr)
 		defer r.Body.Close()
 		data, err := ioutil.ReadAll(r.Body)
 		if err != nil {
