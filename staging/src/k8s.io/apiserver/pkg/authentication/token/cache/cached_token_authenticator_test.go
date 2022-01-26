@@ -163,7 +163,7 @@ func BenchmarkKeyFunc(b *testing.B) {
 	b.Run("has audiences", func(b *testing.B) {
 		var key string
 		for n := 0; n < b.N; n++ {
-			key = keyFunc(hashPool, auds, jwtToken)
+			key = keyFunc(hashPool, auds, jwtToken, "")
 		}
 		bKey = key
 	})
@@ -171,7 +171,7 @@ func BenchmarkKeyFunc(b *testing.B) {
 	b.Run("nil audiences", func(b *testing.B) {
 		var key string
 		for n := 0; n < b.N; n++ {
-			key = keyFunc(hashPool, nil, jwtToken)
+			key = keyFunc(hashPool, nil, jwtToken, "")
 		}
 		bKey = key
 	})
