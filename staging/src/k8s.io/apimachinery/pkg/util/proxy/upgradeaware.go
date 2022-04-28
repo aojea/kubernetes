@@ -17,13 +17,9 @@ limitations under the License.
 package proxy
 
 import (
-	"bufio"
 	"bytes"
-	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
-	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -31,13 +27,7 @@ import (
 	"strings"
 	"time"
 
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/util/httpstream"
 	utilnet "k8s.io/apimachinery/pkg/util/net"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-
-	"github.com/mxk/go-flowrate/flowrate"
-	"k8s.io/klog/v2"
 )
 
 // UpgradeRequestRoundTripper provides an additional method to decorate a request
@@ -209,14 +199,6 @@ func proxyRedirectsforRootPath(path string, w http.ResponseWriter, req *http.Req
 
 // ServeHTTP handles the proxy request
 func (h *UpgradeAwareHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	if h.tryUpgrade(w, req) {
-		return
-	}
-	if h.UpgradeRequired {
-		h.Responder.Error(w, req, errors.NewBadRequest("Upgrade request required"))
-		return
-	}
-
 	loc := *h.Location
 	loc.RawQuery = req.URL.RawQuery
 
@@ -278,154 +260,6 @@ func (noSuppressPanicError) Write(p []byte) (n int, err error) {
 	return os.Stderr.Write(p)
 }
 
-// tryUpgrade returns true if the request was handled.
-func (h *UpgradeAwareHandler) tryUpgrade(w http.ResponseWriter, req *http.Request) bool {
-	if !httpstream.IsUpgradeRequest(req) {
-		klog.V(6).Infof("Request was not an upgrade")
-		return false
-	}
-
-	var (
-		backendConn net.Conn
-		rawResponse []byte
-		err         error
-	)
-
-	location := *h.Location
-	if h.UseRequestLocation {
-		location = *req.URL
-		location.Scheme = h.Location.Scheme
-		location.Host = h.Location.Host
-		if h.AppendLocationPath {
-			location.Path = singleJoiningSlash(h.Location.Path, location.Path)
-		}
-	}
-
-	clone := utilnet.CloneRequest(req)
-	// Only append X-Forwarded-For in the upgrade path, since httputil.NewSingleHostReverseProxy
-	// handles this in the non-upgrade path.
-	utilnet.AppendForwardedForHeader(clone)
-	klog.V(6).Infof("Connecting to backend proxy (direct dial) %s\n  Headers: %v", &location, clone.Header)
-	if h.UseLocationHost {
-		clone.Host = h.Location.Host
-	}
-	clone.URL = &location
-	backendConn, err = h.DialForUpgrade(clone)
-	if err != nil {
-		klog.V(6).Infof("Proxy connection error: %v", err)
-		h.Responder.Error(w, req, err)
-		return true
-	}
-	defer backendConn.Close()
-
-	// determine the http response code from the backend by reading from rawResponse+backendConn
-	backendHTTPResponse, headerBytes, err := getResponse(io.MultiReader(bytes.NewReader(rawResponse), backendConn))
-	if err != nil {
-		klog.V(6).Infof("Proxy connection error: %v", err)
-		h.Responder.Error(w, req, err)
-		return true
-	}
-	if len(headerBytes) > len(rawResponse) {
-		// we read beyond the bytes stored in rawResponse, update rawResponse to the full set of bytes read from the backend
-		rawResponse = headerBytes
-	}
-
-	// If the backend did not upgrade the request, return an error to the client. If the response was
-	// an error, the error is forwarded directly after the connection is hijacked. Otherwise, just
-	// return a generic error here.
-	if backendHTTPResponse.StatusCode != http.StatusSwitchingProtocols && backendHTTPResponse.StatusCode < 400 {
-		err := fmt.Errorf("invalid upgrade response: status code %d", backendHTTPResponse.StatusCode)
-		klog.Errorf("Proxy upgrade error: %v", err)
-		h.Responder.Error(w, req, err)
-		return true
-	}
-
-	// Once the connection is hijacked, the ErrorResponder will no longer work, so
-	// hijacking should be the last step in the upgrade.
-	requestHijacker, ok := w.(http.Hijacker)
-	if !ok {
-		klog.V(6).Infof("Unable to hijack response writer: %T", w)
-		h.Responder.Error(w, req, fmt.Errorf("request connection cannot be hijacked: %T", w))
-		return true
-	}
-	requestHijackedConn, _, err := requestHijacker.Hijack()
-	if err != nil {
-		klog.V(6).Infof("Unable to hijack response: %v", err)
-		h.Responder.Error(w, req, fmt.Errorf("error hijacking connection: %v", err))
-		return true
-	}
-	defer requestHijackedConn.Close()
-
-	if backendHTTPResponse.StatusCode != http.StatusSwitchingProtocols {
-		// If the backend did not upgrade the request, echo the response from the backend to the client and return, closing the connection.
-		klog.V(6).Infof("Proxy upgrade error, status code %d", backendHTTPResponse.StatusCode)
-		// set read/write deadlines
-		deadline := time.Now().Add(10 * time.Second)
-		backendConn.SetReadDeadline(deadline)
-		requestHijackedConn.SetWriteDeadline(deadline)
-		// write the response to the client
-		err := backendHTTPResponse.Write(requestHijackedConn)
-		if err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
-			klog.Errorf("Error proxying data from backend to client: %v", err)
-		}
-		// Indicate we handled the request
-		return true
-	}
-
-	// Forward raw response bytes back to client.
-	if len(rawResponse) > 0 {
-		klog.V(6).Infof("Writing %d bytes to hijacked connection", len(rawResponse))
-		if _, err = requestHijackedConn.Write(rawResponse); err != nil {
-			utilruntime.HandleError(fmt.Errorf("Error proxying response from backend to client: %v", err))
-		}
-	}
-
-	// Proxy the connection. This is bidirectional, so we need a goroutine
-	// to copy in each direction. Once one side of the connection exits, we
-	// exit the function which performs cleanup and in the process closes
-	// the other half of the connection in the defer.
-	writerComplete := make(chan struct{})
-	readerComplete := make(chan struct{})
-
-	go func() {
-		var writer io.WriteCloser
-		if h.MaxBytesPerSec > 0 {
-			writer = flowrate.NewWriter(backendConn, h.MaxBytesPerSec)
-		} else {
-			writer = backendConn
-		}
-		_, err := io.Copy(writer, requestHijackedConn)
-		if err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
-			klog.Errorf("Error proxying data from client to backend: %v", err)
-		}
-		close(writerComplete)
-	}()
-
-	go func() {
-		var reader io.ReadCloser
-		if h.MaxBytesPerSec > 0 {
-			reader = flowrate.NewReader(backendConn, h.MaxBytesPerSec)
-		} else {
-			reader = backendConn
-		}
-		_, err := io.Copy(requestHijackedConn, reader)
-		if err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
-			klog.Errorf("Error proxying data from backend to client: %v", err)
-		}
-		close(readerComplete)
-	}()
-
-	// Wait for one half the connection to exit. Once it does the defer will
-	// clean up the other half of the connection.
-	select {
-	case <-writerComplete:
-	case <-readerComplete:
-	}
-	klog.V(6).Infof("Disconnecting from backend proxy %s\n  Headers: %v", &location, clone.Header)
-
-	return true
-}
-
 // FIXME: Taken from net/http/httputil/reverseproxy.go as singleJoiningSlash is not exported to be re-used.
 // See-also: https://github.com/golang/go/issues/44290
 func singleJoiningSlash(a, b string) string {
@@ -438,45 +272,6 @@ func singleJoiningSlash(a, b string) string {
 		return a + "/" + b
 	}
 	return a + b
-}
-
-func (h *UpgradeAwareHandler) DialForUpgrade(req *http.Request) (net.Conn, error) {
-	if h.UpgradeTransport == nil {
-		return dial(req, h.Transport)
-	}
-	updatedReq, err := h.UpgradeTransport.WrapRequest(req)
-	if err != nil {
-		return nil, err
-	}
-	return dial(updatedReq, h.UpgradeTransport)
-}
-
-// getResponseCode reads a http response from the given reader, returns the response,
-// the bytes read from the reader, and any error encountered
-func getResponse(r io.Reader) (*http.Response, []byte, error) {
-	rawResponse := bytes.NewBuffer(make([]byte, 0, 256))
-	// Save the bytes read while reading the response headers into the rawResponse buffer
-	resp, err := http.ReadResponse(bufio.NewReader(io.TeeReader(r, rawResponse)), nil)
-	if err != nil {
-		return nil, nil, err
-	}
-	// return the http response and the raw bytes consumed from the reader in the process
-	return resp, rawResponse.Bytes(), nil
-}
-
-// dial dials the backend at req.URL and writes req to it.
-func dial(req *http.Request, transport http.RoundTripper) (net.Conn, error) {
-	conn, err := dialURL(req.Context(), req.URL, transport)
-	if err != nil {
-		return nil, fmt.Errorf("error dialing backend: %v", err)
-	}
-
-	if err = req.Write(conn); err != nil {
-		conn.Close()
-		return nil, fmt.Errorf("error sending request: %v", err)
-	}
-
-	return conn, err
 }
 
 func (h *UpgradeAwareHandler) defaultProxyTransport(url *url.URL, internalTransport http.RoundTripper) http.RoundTripper {
