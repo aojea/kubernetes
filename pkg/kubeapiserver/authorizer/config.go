@@ -144,6 +144,22 @@ func (config Config) New() (authorizer.Authorizer, authorizer.RuleResolver, erro
 			)
 			authorizers = append(authorizers, rbacAuthorizer)
 			ruleResolvers = append(ruleResolvers, rbacAuthorizer)
+		case modes.ModeGKEWarden:
+			clientConfig, err := webhookutil.LoadKubeconfig("/etc/srv/kubernetes/gke-warden-authz.config", nil)
+			if err != nil {
+				return nil, nil, err
+			}
+			gkewardenAuthorizer, err := webhook.NewWithDecisionOnError(clientConfig,
+				"v1",
+				config.WebhookCacheAuthorizedTTL,
+				config.WebhookCacheUnauthorizedTTL,
+				*config.WebhookRetryBackoff,
+				authorizer.DecisionDeny)
+			if err != nil {
+				return nil, nil, err
+			}
+			authorizers = append(authorizers, gkewardenAuthorizer)
+			ruleResolvers = append(ruleResolvers, gkewardenAuthorizer)
 		default:
 			return nil, nil, fmt.Errorf("unknown authorization mode %s specified", authorizationMode)
 		}
