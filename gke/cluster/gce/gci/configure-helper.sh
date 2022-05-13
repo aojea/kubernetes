@@ -930,7 +930,7 @@ users:
   - name: kube-apiserver
     user:
       auth-provider:
-        name: gcp
+        name: gke
 current-context: webhook
 contexts:
 - context:
@@ -950,7 +950,7 @@ users:
   - name: kube-apiserver
     user:
       auth-provider:
-        name: gcp
+        name: gke
 current-context: webhook
 contexts:
 - context:
@@ -1073,7 +1073,7 @@ users:
   - name: kube-apiserver
     user:
       auth-provider:
-        name: gcp
+        name: gke
 current-context: webhook
 contexts:
 - context:
@@ -1296,7 +1296,7 @@ users:
   - name: kube-apiserver
     user:
       auth-provider:
-        name: gcp
+        name: gke
 current-context: webhook
 contexts:
 - context:
