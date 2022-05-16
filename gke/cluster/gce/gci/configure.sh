@@ -40,7 +40,7 @@ DEFAULT_MOUNTER_ROOTFS_TAR_ARM64_SHA512='83cf9ab7961627359654131abd2d4c4b72875d3
 RIPTIDE_FUSE_BUCKET="${RIPTIDE_FUSE_BUCKET:-gke-release}"
 RIPTIDE_SNAPSHOTTER_BUCKET="${RIPTIDE_SNAPSHOTTER_BUCKET:-gke-release}"
 RIPTIDE_FUSE_VERSION="${RIPTIDE_FUSE_VERSION:-v0.104.0}"
-RIPTIDE_SNAPSHOTTER_VERSION="${RIPTIDE_SNAPSHOTTER_VERSION:-v1.4-18}"
+RIPTIDE_SNAPSHOTTER_VERSION="${RIPTIDE_SNAPSHOTTER_VERSION:-v1.4-19}"
 
 # Standard curl flags.
 CURL_FLAGS='--fail --silent --show-error --retry 5 --retry-delay 3 --connect-timeout 10 --retry-connrefused'
@@ -674,8 +674,15 @@ function install-riptide-snapshotter {
   if [[ "${RIPTIDE_SNAPSHOTTER_VERSION}" > v1.4-2 ]]; then
     download-or-bust "" "${RIPTIDE_SNAPSHOTTER_STORE_PATH}/containerd-gcfs-grpc.tar.gz"
   fi
-  download-or-bust "" "${RIPTIDE_SNAPSHOTTER_STORE_PATH}/containerd-gcfs-grpc"
-  mv "${KUBE_HOME}/containerd-gcfs-grpc" "${KUBE_HOME}/bin/containerd-gcfs-grpc"
+
+  if [[ "${HOST_ARCH}" == "arm64" ]]; then
+    RIPTIDE_SNAPSHOTTER_BINARY="containerd-gcfs-grpc-arm64"
+  else
+    RIPTIDE_SNAPSHOTTER_BINARY="containerd-gcfs-grpc"
+  fi
+
+  download-or-bust "" "${RIPTIDE_SNAPSHOTTER_STORE_PATH}/${RIPTIDE_SNAPSHOTTER_BINARY}"
+  mv "${KUBE_HOME}/${RIPTIDE_SNAPSHOTTER_BINARY}" "${KUBE_HOME}/bin/containerd-gcfs-grpc"
   chmod a+x "${KUBE_HOME}/bin/containerd-gcfs-grpc"
   record-preload-info "containerd-gcfs-grpc" "${RIPTIDE_SNAPSHOTTER_VERSION}"
 }
