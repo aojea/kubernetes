@@ -27,6 +27,7 @@ EVAL_LOCALS_DICT = {
     'cpu_count': cpu_count,
     'max': max,
     'mem_bytes': mem_bytes,
+    'int': int,
 }
 
 

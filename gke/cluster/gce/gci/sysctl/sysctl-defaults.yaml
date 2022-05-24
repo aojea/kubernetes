@@ -33,7 +33,7 @@ fs.inotify.max_user_watches: "12288"
 
 # Override the OS default value (mem_bytes()/10240), which is too small for
 # machines with less than 80GiB ram. See b/222843948.
-fs.file-max: "max(8388608,mem_bytes()/10240)"
+fs.file-max: "int(max(8388608,mem_bytes()/10240))"
 
 # Override the TCP keepalive time to align with GCP's default reply-allowed
 # rule (10 minutes) and defaults in COS-M85. See b/153915988 and
