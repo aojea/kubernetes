@@ -67,7 +67,7 @@ def eval_expressions(sysctls):
 
 
 def get_sysctls_from_file(filename):
-  sysctls = yaml.load(open(filename, 'r'))
+  sysctls = yaml.safe_load(open(filename, 'r'))
   if not sysctls:
     return sysctls
   # Evaluate the expressions in the default sysctl values. This has no security
