@@ -84,7 +84,7 @@ build-env:
     # `gke-distroless/go-runner` release, see: http://go/gke-security-compliance#updating-gke-distrolessgo-runner
     go-runner: "gke.gcr.io/gke-distroless/go-runner:20210225_1710_RC0"
     # The kube-proxy base image to use.
-    kube-proxy-base: "k8s.gcr.io/build-image/debian-iptables:bullseye-v1.3.0"
+    kube-proxy-base: "k8s.gcr.io/build-image/debian-iptables:bullseye-v1.4.0"
     # The setcap image to use.
     setcap: "k8s.gcr.io/build-image/setcap:buster-v2.0.4"
 
