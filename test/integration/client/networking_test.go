@@ -32,8 +32,10 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilnet "k8s.io/apimachinery/pkg/util/net"
+	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/metrics"
 	kubeapiservertesting "k8s.io/kubernetes/cmd/kube-apiserver/app/testing"
 	"k8s.io/kubernetes/test/integration/framework"
@@ -149,6 +151,144 @@ func Test_Client_Get_Network_Errors(t *testing.T) {
 			if err != nil {
 				t.Errorf("unexpected error received: %v", err)
 			}
+
+			// reset connections so we start clean
+			utilnet.CloseIdleConnectionsFor(test.client.RESTClient().(*rest.RESTClient).Client.Transport)
+			test.lb.resetCounter()
+			actualMetrics.reset()
+
+			// start rejecting
+			test.lb.setReject(true)
+			defer test.lb.setReject(false)
+
+			now := time.Now()
+			_, err = test.client.CoreV1().Services("default").Get(context.TODO(), "kubernetes", metav1.GetOptions{})
+			if err == nil {
+				t.Errorf("expected error")
+			}
+			if err != nil && !strings.Contains(err.Error(), test.expectedError) {
+				t.Errorf("received error %v expected to contain: %s", err, test.expectedError)
+			}
+
+			// measure the time that client-go blocks if is not running as presubmit
+			if !testing.Short() {
+				elapsed := time.Since(now)
+				if elapsed < test.expectedDuration {
+					t.Errorf("expected call blocked for ~ 10 seconds (10 retries per second), current duration: %v", elapsed)
+				}
+			}
+
+			if test.lb.getCounter() != test.expectedConnections {
+				t.Errorf("expected %d connections, got %d", test.expectedConnections, test.lb.getCounter())
+			}
+
+			v, ok := actualMetrics.codes[test.expectedMetricResult]
+			if !ok {
+				t.Errorf("expected metrics with code: %s", test.expectedMetricResult)
+			}
+			if v != test.expectedConnections {
+				t.Errorf("expected %d metrics with code: %s, got %d", test.expectedConnections, test.expectedMetricResult, v)
+			}
+		})
+	}
+
+}
+
+func Test_Informers_Network_Errors(t *testing.T) {
+	actualMetrics := &resultMetrics{}
+	metrics.RequestResult = actualMetrics
+
+	// run an apiserver
+	result := kubeapiservertesting.StartTestServerOrDie(t, nil, []string{"--disable-admission-plugins", "ServiceAccount"}, framework.SharedEtcd())
+	defer result.TearDownFn()
+
+	apiURL, err := url.Parse(result.ClientConfig.Host)
+	if err != nil {
+		t.Errorf("unexpected error %v", err)
+	}
+
+	tr, err := rest.TransportFor(result.ClientConfig)
+	if err != nil {
+		t.Errorf("unexpected error %v", err)
+	}
+
+	stopCh := make(chan struct{})
+	defer close(stopCh)
+
+	// create a layer 7 (http) loadbalancer and a clientset using it
+	httpLB := newHTTPLB(apiURL, tr)
+	httpLB.serve(stopCh)
+
+	cfg := rest.CopyConfig(result.ClientConfig)
+	cfg.Host = httpLB.url()
+	cfg.TLSClientConfig = rest.TLSClientConfig{
+		Insecure: true,
+	}
+	clientHTTPLB := clientset.NewForConfigOrDie(cfg)
+
+	// create a layer 4 (tcp) loadbalancer
+	tcpLB := newLB(t, apiURL.Host)
+	tcpLB.serve(stopCh)
+	cfg = rest.CopyConfig(result.ClientConfig)
+	cfg.Host = tcpLB.url()
+	clientTCPLB := clientset.NewForConfigOrDie(cfg)
+
+	tests := []struct {
+		name                 string
+		lb                   loadBalancer
+		client               *clientset.Clientset
+		expectedConnections  int
+		expectedDuration     time.Duration
+		expectedError        string
+		expectedMetricResult string
+	}{
+		{
+			name:                 "retries for TCP loadbalancer",
+			lb:                   tcpLB,
+			client:               clientTCPLB,
+			expectedConnections:  11 * 5,
+			expectedDuration:     10 * 5 * time.Second,
+			expectedError:        "EOF",
+			expectedMetricResult: "<error>",
+		},
+		{
+			name:                 "retries for HTTP loadbalancer",
+			lb:                   httpLB,
+			client:               clientHTTPLB,
+			expectedConnections:  11 * 5,
+			expectedDuration:     10 * 5 * time.Second,
+			expectedError:        "INJECTED ERROR",
+			expectedMetricResult: "500",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// check proxy works fine
+			_, err = test.client.CoreV1().Services("default").Get(context.TODO(), "kubernetes", metav1.GetOptions{})
+			if err != nil {
+				t.Errorf("unexpected error received: %v", err)
+			}
+
+			informers := informers.NewSharedInformerFactory(test.client, 0)
+			sharedInformers := []cache.SharedIndexInformer{
+				informers.Core().V1().Pods().Informer(),
+				informers.Core().V1().Services().Informer(),
+				informers.Core().V1().Nodes().Informer(),
+				informers.Discovery().V1().EndpointSlices().Informer(),
+			}
+
+			for _, inf := range sharedInformers {
+				inf.AddEventHandler(cache.ResourceEventHandlerFuncs{
+					AddFunc:    func(obj interface{}) {},
+					UpdateFunc: func(new, old interface{}) {},
+					DeleteFunc: func(obj interface{}) {},
+				})
+			}
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			informers.Start(ctx.Done())
 
 			// reset connections so we start clean
 			utilnet.CloseIdleConnectionsFor(test.client.RESTClient().(*rest.RESTClient).Client.Transport)
