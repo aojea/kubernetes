@@ -41,7 +41,7 @@ function install-m4a-apparmor-profile {
 
   if type apparmor_parser; then
     echo "Downloading ${profile}."
-    if ! [ download-or-bust "${hash}" "${release_path}/artifacts/${profile}" ]; then
+    if ! download-or-bust "${hash}" "${release_path}/artifacts/${profile}"; then
       echo "Failed to download ${profile}, cannot install M4A apparmor profile"
       return
     fi
