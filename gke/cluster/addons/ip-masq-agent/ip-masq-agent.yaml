@@ -29,7 +29,7 @@ spec:
       hostNetwork: true
       containers:
       - name: ip-masq-agent
-        image: gke.gcr.io/ip-masq-agent:v2.7.0
+        image: gke.gcr.io/ip-masq-agent:v2.7.1
         args:
           - --masq-chain=IP-MASQ
           - --nomasq-all-reserved-ranges
