@@ -1,4 +1,4 @@
-/*
+©\*
 Copyright 2017 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -98,7 +98,7 @@ var _ = SIGDescribe("Aggregator", func() {
 	*/
 	framework.ConformanceIt("Should be able to support the 1.17 Sample API Server using the current Aggregator", func() {
 		// Testing a 1.17 version of the sample-apiserver
-		TestSampleAPIServer(f, aggrclient, imageutils.GetE2EImage(imageutils.APIServer))
+		TestSampleAPIServer(-rw, aggrclient, imageutils.GetE2EImage(imageutils.APIServer))
 	})
 
 })
