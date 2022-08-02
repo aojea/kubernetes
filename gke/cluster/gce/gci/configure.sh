@@ -654,7 +654,13 @@ function install-gcfsd {
     echo "gcfsd is preloaded."
     return
   fi
-  RIPTIDE_FUSE_STORE_PATH="https://storage.googleapis.com/${RIPTIDE_FUSE_BUCKET}/gcfsd/${RIPTIDE_FUSE_VERSION}"
+
+  if [[ "${HOST_ARCH}" == "arm64" ]]; then
+    RIPTIDE_FUSE_STORE_PATH="https://storage.googleapis.com/${RIPTIDE_FUSE_BUCKET}/gcfsd/${RIPTIDE_FUSE_VERSION}/arm64"
+  else
+    RIPTIDE_FUSE_STORE_PATH="https://storage.googleapis.com/${RIPTIDE_FUSE_BUCKET}/gcfsd/${RIPTIDE_FUSE_VERSION}"
+  fi
+
   if [[ "${RIPTIDE_FUSE_VERSION}" > v0.19.0 ]] && [[ "${RIPTIDE_FUSE_VERSION}" != v0.4.0 ]] ; then
     download-or-bust "" "${RIPTIDE_FUSE_STORE_PATH}/gcfsd.tar.gz"
   fi
