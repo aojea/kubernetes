@@ -756,7 +756,8 @@ set_global_vars()
 
   # Set variables for boringcrypto-built binaries. This is done during
   # validation.
-  __golang_boringcrypto_image=$(get_val "build-env.compiler-image.deps.golang-boringcrypto-image")
+  # As of go1.19+, the standard golang release supports boringcrypto builds.
+  __golang_boringcrypto_image=$(get_val "build-env.compiler-image.deps.golang-image")
   log.debugvar __golang_boringcrypto_image
   if [[ -n "${__golang_boringcrypto_image}" ]]; then
     __boringcrypto_bins=""
@@ -777,6 +778,8 @@ set_global_vars()
     # Note: as of release `b6`, the go-boringcrypto buildchain automatically
     # sets the `boringcrypto` build tag.
     __GOFLAGS='-tags=gkeboringcrypto'
+    # Enable boringcrypto support in the stdlib
+    __GOEXPERIMENT=boringcrypto
   fi
 
   # This overrides the OSS `go-runner` runtime base image.
@@ -1017,6 +1020,7 @@ compile()
     -e KUBE_GIT_VERSION_FILE="${__KUBE_ROOT_MOUNT_PATH}/${KUBE_GIT_VERSION_FILE}" \
     -e KUBE_CGO_OVERRIDES="${__KUBE_CGO_OVERRIDES:-}" \
     -e GOFLAGS="${__GOFLAGS:-}" \
+    -e GOEXPERIMENT="${__GOEXPERIMENT:-}" \
     -v "${KUBE_ROOT}":"${__KUBE_ROOT_MOUNT_PATH}" \
     -w "${__KUBE_ROOT_MOUNT_PATH}" \
     -u "$(id -u):$(id -g)" \

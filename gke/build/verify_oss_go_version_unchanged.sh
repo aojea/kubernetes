@@ -20,8 +20,8 @@ CONFIG_FILE_COPY="${SCRIPT_DIR}/config/common-copy.yaml"  # Used to take a diff 
 KUBE_ROOT="$(cd "${SCRIPT_DIR}" && git rev-parse --show-toplevel)"
 OSS_KUBECROSS_VERSION_FILE="${KUBE_ROOT}/build/build-image/cross/VERSION"
 
-# Post 1.16.10, boringcrypto is hosted at this project (formerly DockerHub)
-BORINGCRYPTO_IMAGE="us-docker.pkg.dev/google.com/api-project-999119582588/go-boringcrypto/golang"
+# Post 1.19, boringcrypto builds are supported by the normal go distribution
+GOLANG_IMAGE="golang"
 PATCH_FILE="${KUBE_ROOT}/diff.patch"
 
 # shellcheck source=./lib_assert.sh
@@ -52,14 +52,12 @@ function write_val {
 
 function generate_patch {
   local new_golang_image="${1}"
-  local new_boringcrypto_image="${2}"
-  local new_kubecross_version="${3}"
+  local new_kubecross_version="${2}"
 
   log.info "Generating patch..."
   cp  "${CONFIG_FILE}" "${CONFIG_FILE_COPY}"
 
   write_val "build-env.compiler-image.deps.golang-image"  "${new_golang_image}"
-  write_val "build-env.compiler-image.deps.golang-boringcrypto-image" "${new_boring_image}"
   write_val "build-env.compiler-image.fips.go-boringcrypto.last-updated-for-oss-kubecross-version" "${new_kubecross_version}"
 
   log.debug "Generating diff..."
@@ -94,11 +92,6 @@ function kubecross_version_to_go_semver()
   echo ${oss_trimmed}
 }
 
-function get_boring_tags()
-{
-  gcloud container images list-tags "${BORINGCRYPTO_IMAGE}" --format="value(tags)"
-}
-
 log.info "Reading OSS kube-cross image version..."
 assert_path_exists "${OSS_KUBECROSS_VERSION_FILE}"
 oss_kubecross_version="$(cat "${OSS_KUBECROSS_VERSION_FILE}")"
@@ -107,11 +100,9 @@ log.info "OSS kube-cross complete version: \"${oss_kubecross_version}\""
 log.info "OSS kube-cross Go version: \"${oss_kubecross_go_version}\""
 
 __old_golang_image=$(get_val "build-env.compiler-image.deps.golang-image")
-__old_golang_boringcrypto_image=$(get_val "build-env.compiler-image.deps.golang-boringcrypto-image")
 __last_updated_kubecross_version=$(get_val "build-env.compiler-image.fips.go-boringcrypto.last-updated-for-oss-kubecross-version")
 
 log.debugvar __old_golang_image
-log.debugvar __old_golang_boringcrypto_image
 log.debugvar __last_updated_kubecross_version
 log.debugvar oss_kubecross_version
 log.debugvar oss_kubecross_go_version
@@ -124,16 +115,8 @@ else
   log.info "See http://goto.google.com/gke-security-compliance#periodics-gob-kubernetes-verify-golang-version-failure-playbook for step-by-step resolution instructions."
   log.info "Some of this will now be attempted on your behalf..."
 
-  # Check if desired release is available
-  # boringcrypto releases follow the pattern "<go version>b<module revision>"
-  # See if there is a boringcrypto release of the corresponding version using crane.  Use the b to anchor.
-  new_boring_image_tag=$(get_boring_tags | grep "^${oss_kubecross_go_version}b" || true)
-  if [ -n "${new_boring_image_tag:-}" ] ; then
-    new_boring_image="${BORINGCRYPTO_IMAGE}:${new_boring_image_tag}"
-    log.info "boringcrypto release available: ${new_boring_image}"
-    generate_patch "golang:${oss_kubecross_go_version}" "${new_boring_image}" "${oss_kubecross_go_version}"
-    log.fail "Run $(realpath --relative-to=${KUBE_ROOT} $0) locally to generate necessary patch.  Then call 'git apply ${PATCH_FILE}' to apply the necessary diff to bump to the updated go / boringcrypto releases."
-  else
-    log.fail "No boringcrypto release tag corresponding to Go version ${oss_kubecross_go_version} found at ${BORINGCRYPTO_IMAGE}.  Confirm that release should be pending and block this test's alert on that release ticket.  See the above playbook link for additional details."
-  fi
+  new_boring_image="${GOLANG_IMAGE}:${oss_kubecross_go_version}"
+  log.info "boringcrypto release available: ${new_boring_image}"
+  generate_patch "${new_boring_image}" "${oss_kubecross_go_version}"
+  log.fail "Run $(realpath --relative-to=${KUBE_ROOT} $0) locally to generate necessary patch.  Then call 'git apply ${PATCH_FILE}' to apply the necessary diff to bump to the updated go / boringcrypto releases."
 fi
