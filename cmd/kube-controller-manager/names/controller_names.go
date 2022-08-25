@@ -87,6 +87,7 @@ const (
 	ResourceClaimController                      = "resourceclaim-controller"
 	LegacyServiceAccountTokenCleanerController   = "legacy-serviceaccount-token-cleaner-controller"
 	ValidatingAdmissionPolicyStatusController    = "validatingadmissionpolicy-status-controller"
+	ServiceCIDRController                        = "service-cidr-controller"
 )
 
 // KCMControllerAliases returns a mapping of aliases to canonical controller names

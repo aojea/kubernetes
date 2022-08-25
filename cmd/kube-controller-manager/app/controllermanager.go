@@ -483,6 +483,9 @@ func NewControllerInitializers(loopMode ControllerLoopMode) map[string]InitFunc 
 	if utilfeature.DefaultFeatureGate.Enabled(genericfeatures.ValidatingAdmissionPolicy) {
 		register(names.ValidatingAdmissionPolicyStatusController, startValidatingAdmissionPolicyStatusController)
 	}
+	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.MultiCIDRServiceAllocator) {
+		register(names.ServiceCIDRController, startServiceCIDRsController)
+	}
 
 	return controllers
 }
