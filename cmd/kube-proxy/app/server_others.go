@@ -389,10 +389,21 @@ func waitForPodCIDR(client clientset.Interface, nodeName string) (*v1.Node, erro
 		},
 	}
 	condition := func(event watch.Event) (bool, error) {
-		if n, ok := event.Object.(*v1.Node); ok {
-			return n.Spec.PodCIDR != "" && len(n.Spec.PodCIDRs) > 0, nil
+		// there can be situations where a node is recreated with the same name,
+		// we should filter those events to avoid setting stale PodCIDR values.
+		// PodCIDR is only set on updates.
+		if event.Type != watch.Modified {
+			return false, nil
 		}
-		return false, fmt.Errorf("event object not of type Node")
+		n, ok := event.Object.(*v1.Node)
+		if !ok {
+			return false, fmt.Errorf("event object not of type Node")
+		}
+		// don't consider the node if is going to be deleted
+		if !n.DeletionTimestamp.IsZero() {
+			return false, nil
+		}
+		return n.Spec.PodCIDR != "" && len(n.Spec.PodCIDRs) > 0, nil
 	}
 
 	evt, err := toolswatch.UntilWithSync(ctx, lw, &v1.Node{}, nil, condition)
