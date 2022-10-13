@@ -86,7 +86,7 @@ build-env:
     # The kube-proxy base image to use.
     kube-proxy-base: "k8s.gcr.io/build-image/distroless-iptables:v0.1.2"
     # The setcap image to use.
-    setcap: "k8s.gcr.io/build-image/setcap:buster-v2.0.4"
+    setcap: "gcr.io/gke-release/gke-distroless/setcap:gke_distroless_20221012.00_p0@sha256:0338a7a3edcedb0c2c43119f97ce1eb138c24689961af95de6149589712dfc64"
 
 compile:
   # This is the VERSION field that is supplied at Golang compilation time. This
