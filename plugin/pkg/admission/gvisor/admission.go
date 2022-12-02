@@ -364,12 +364,15 @@ func validateGVisorPod(pod *core.Pod) error {
 		if pod.Spec.SecurityContext.HostIPC {
 			return fmt.Errorf("HostIPC is not allowed")
 		}
-		if pod.Spec.SecurityContext != nil {
-			if pod.Spec.SecurityContext.SELinuxOptions != nil {
-				return fmt.Errorf("SELinuxOptions is not supported")
-			}
-			if len(pod.Spec.SecurityContext.Sysctls) > 0 {
-				return fmt.Errorf("Sysctls is not supported")
+		if pod.Spec.SecurityContext.SELinuxOptions != nil {
+			return fmt.Errorf("SELinuxOptions is not supported")
+		}
+		if len(pod.Spec.SecurityContext.Sysctls) > 0 {
+			return fmt.Errorf("Sysctls is not supported")
+		}
+		if profile := pod.Spec.SecurityContext.SeccompProfile; profile != nil {
+			if profile.Type != core.SeccompProfileTypeUnconfined && profile.Type != core.SeccompProfileTypeRuntimeDefault {
+				return fmt.Errorf("Only Unconfined and RuntimeDefault seccomp profiles are supported")
 			}
 		}
 	}
@@ -378,10 +381,10 @@ func validateGVisorPod(pod *core.Pod) error {
 			return fmt.Errorf("Apparmor is not supported")
 		}
 		if strings.HasPrefix(k, "seccomp.security.alpha.kubernetes.io") {
-			return fmt.Errorf("Seccomp is not supported")
+			return fmt.Errorf("Seccomp via annotations is not supported; use pod SecurityContext")
 		}
 		if strings.HasPrefix(k, "container.seccomp.security.alpha.kubernetes.io") {
-			return fmt.Errorf("Seccomp is not supported")
+			return fmt.Errorf("Seccomp via annotations is not supported; use pod SecurityContext")
 		}
 	}
 	var containers []core.Container
@@ -400,6 +403,11 @@ func validateGVisorPod(pod *core.Pod) error {
 			}
 			if c.SecurityContext.ProcMount != nil && *c.SecurityContext.ProcMount != core.DefaultProcMount {
 				return fmt.Errorf("ProcMount=%s is not supported", *c.SecurityContext.ProcMount)
+			}
+			if profile := c.SecurityContext.SeccompProfile; profile != nil {
+				if profile.Type != core.SeccompProfileTypeUnconfined && profile.Type != core.SeccompProfileTypeRuntimeDefault {
+					return fmt.Errorf("Only Unconfined and RuntimeDefault seccomp profiles are supported")
+				}
 			}
 		}
 		if len(c.VolumeDevices) != 0 {
