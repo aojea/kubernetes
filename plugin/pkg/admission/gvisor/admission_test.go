@@ -212,6 +212,42 @@ func TestValidateGVisorPod(t *testing.T) {
 			},
 			expectErr: true,
 		},
+		"pod with RuntimeDefault seccomp profile": {
+			pod: core.Pod{
+				Spec: core.PodSpec{
+					SecurityContext: &core.PodSecurityContext{
+						SeccompProfile: &core.SeccompProfile{
+							Type: core.SeccompProfileTypeRuntimeDefault,
+						},
+					},
+				},
+			},
+			expectErr: false,
+		},
+		"pod with Unconfined seccomp profile": {
+			pod: core.Pod{
+				Spec: core.PodSpec{
+					SecurityContext: &core.PodSecurityContext{
+						SeccompProfile: &core.SeccompProfile{
+							Type: core.SeccompProfileTypeUnconfined,
+						},
+					},
+				},
+			},
+			expectErr: false,
+		},
+		"pod with invalid seccomp profile": {
+			pod: core.Pod{
+				Spec: core.PodSpec{
+					SecurityContext: &core.PodSecurityContext{
+						SeccompProfile: &core.SeccompProfile{
+							Type: "invalid profile",
+						},
+					},
+				},
+			},
+			expectErr: true,
+		},
 		"pod with empty SecurityContext container": {
 			pod: core.Pod{
 				Spec: core.PodSpec{
@@ -267,6 +303,57 @@ func TestValidateGVisorPod(t *testing.T) {
 									Role:  "role",
 									Type:  "type",
 									Level: "level",
+								},
+							},
+						},
+					},
+				},
+			},
+			expectErr: true,
+		},
+		"pod with container with RuntimeDefault seccomp profile": {
+			pod: core.Pod{
+				Spec: core.PodSpec{
+					Containers: []core.Container{
+						{
+							Name: "container",
+							SecurityContext: &core.SecurityContext{
+								SeccompProfile: &core.SeccompProfile{
+									Type: core.SeccompProfileTypeRuntimeDefault,
+								},
+							},
+						},
+					},
+				},
+			},
+			expectErr: false,
+		},
+		"pod with container with Unconfined seccomp profile": {
+			pod: core.Pod{
+				Spec: core.PodSpec{
+					Containers: []core.Container{
+						{
+							Name: "container",
+							SecurityContext: &core.SecurityContext{
+								SeccompProfile: &core.SeccompProfile{
+									Type: core.SeccompProfileTypeUnconfined,
+								},
+							},
+						},
+					},
+				},
+			},
+			expectErr: false,
+		},
+		"pod with container with invalid seccomp profile": {
+			pod: core.Pod{
+				Spec: core.PodSpec{
+					Containers: []core.Container{
+						{
+							Name: "container",
+							SecurityContext: &core.SecurityContext{
+								SeccompProfile: &core.SeccompProfile{
+									Type: "invalid profile",
 								},
 							},
 						},
@@ -443,6 +530,26 @@ func TestValidateGVisorPod(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{
 						"container.seccomp.security.alpha.kubernetes.io/test": "test",
+					},
+				},
+			},
+			expectErr: true,
+		},
+		"pod with RuntimeDefault Seccomp": {
+			pod: core.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						"seccomp.security.alpha.kubernetes.io/pod": "RuntimeDefault",
+					},
+				},
+			},
+			expectErr: true,
+		},
+		"pod with RuntimeDefault Seccomp container": {
+			pod: core.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						"container.seccomp.security.alpha.kubernetes.io/test": "RuntimeDefault",
 					},
 				},
 			},
