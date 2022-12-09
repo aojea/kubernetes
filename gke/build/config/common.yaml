@@ -52,7 +52,7 @@ build-env:
       #
       # Set the <VALUE> to something low like `go1.13.0' to allow
       # experimentation with a wide range of go compilers.
-      golang-image: golang:1.19.3
+      golang-image: golang:1.19.4
       protobuf: "3.0.2"
       etcd: "v3.4.13"
     fips:
@@ -62,7 +62,7 @@ build-env:
         # /build/build-image/cross/VERSION
         # This value should include only the semver for the go version, not the
         # additional build kubecross build info.
-        last-updated-for-oss-kubecross-version: 1.19.3
+        last-updated-for-oss-kubecross-version: 1.19.4
   # This is a separate image that is used for the package-tarballs.sh step,
   # which requires Docker.
   docker-image:
