@@ -754,33 +754,37 @@ set_global_vars()
   export __KUBE_ROOT_MOUNT_PATH
   log.debugvar __KUBE_ROOT_MOUNT_PATH
 
-  # Set variables for boringcrypto-built binaries. This is done during
-  # validation.
-  # As of go1.19+, the standard golang release supports boringcrypto builds.
-  __golang_boringcrypto_image=$(get_val "build-env.compiler-image.deps.golang-image")
-  log.debugvar __golang_boringcrypto_image
-  if [[ -n "${__golang_boringcrypto_image}" ]]; then
-    __boringcrypto_bins=""
-    bc_binaries_len="$(get_val "validate.boringcrypto.binaries" -l)"
-    for ((i=0; i<bc_binaries_len; ++i)); do
-      __boringcrypto_bins+="$(get_val "validate.boringcrypto.binaries[$i]")",
-    done
-    # Drop trailing comma.
-    __boringcrypto_bins="${__boringcrypto_bins:0: -1}"
-    log.debugvar __boringcrypto_bins
-
-    # Make a space-separated list of bins that should be compiled with CGO enabled.
-    # See `KUBE_CGO_OVERRIDES` in hack/lib/golang.sh.
-    # Boringcrypto requires cgo to be enabled.
-    __KUBE_CGO_OVERRIDES="$(sed "s/,/ /g" <<< "${__boringcrypto_bins}")"
-    log.debugvar __KUBE_CGO_OVERRIDES
-    # Set the `gkeboringcrypto` build flag.
-    # Note: as of release `b6`, the go-boringcrypto buildchain automatically
-    # sets the `boringcrypto` build tag.
-    __GOFLAGS='-tags=gkeboringcrypto'
-    # Enable boringcrypto support in the stdlib
-    __GOEXPERIMENT=boringcrypto
+  # This is the golang image used to build
+  __golang_image=$(get_val "build-env.compiler-image.deps.golang-image")
+  log.debugvar __golang_image
+  if [[ -z "${__golang_image}" ]]; then
+    log.info "no build-env.compiler-image.deps.golang-image specified, using .go-version if available"
+    __golang_image_version=$(cat "${KUBE_ROOT}/.go-version")
+    __golang_image="golang:${__golang_image_version}"
+    log.debugvar __golang_image
   fi
+
+  # Set variables for boringcrypto-built binaries. This is done during validation.
+  __boringcrypto_bins=""
+  bc_binaries_len="$(get_val "validate.boringcrypto.binaries" -l)"
+  for ((i=0; i<bc_binaries_len; ++i)); do
+    __boringcrypto_bins+="$(get_val "validate.boringcrypto.binaries[$i]")",
+  done
+  # Drop trailing comma.
+  __boringcrypto_bins="${__boringcrypto_bins:0: -1}"
+  log.debugvar __boringcrypto_bins
+
+  # Make a space-separated list of bins that should be compiled with CGO enabled.
+  # See `KUBE_CGO_OVERRIDES` in hack/lib/golang.sh.
+  # Boringcrypto requires cgo to be enabled.
+  __KUBE_CGO_OVERRIDES="$(sed "s/,/ /g" <<< "${__boringcrypto_bins}")"
+  log.debugvar __KUBE_CGO_OVERRIDES
+  # Set the `gkeboringcrypto` build flag.
+  # Note: as of release `b6`, the go-boringcrypto buildchain automatically
+  # sets the `boringcrypto` build tag.
+  __GOFLAGS='-tags=gkeboringcrypto'
+  # Enable boringcrypto support in the stdlib
+  __GOEXPERIMENT=boringcrypto
 
   # This overrides the OSS `go-runner` runtime base image.
   __go_runner_image=$(get_val "build-env.runtime-image.go-runner")
@@ -813,10 +817,7 @@ set_compiler_image_tag()
 
   etcd_version=$(get_val "build-env.compiler-image.deps.etcd")
   protobuf_version=$(get_val "build-env.compiler-image.deps.protobuf")
-  golang_image_full=$(get_val "build-env.compiler-image.deps.golang-image")
-  if [[ -n "${__golang_boringcrypto_image}" ]]; then
-    golang_image_full="${__golang_boringcrypto_image}"
-  fi
+  golang_image_full="${__golang_image}"
   golang_image_only="${golang_image_full%:*}"
   golang_image_only="${golang_image_only##*/}"
   golang_tag="${golang_image_full#*:}"
@@ -914,10 +915,7 @@ prepare_build_env()
   etcd_version=$(get_val "build-env.compiler-image.deps.etcd")
   protobuf_version=$(get_val "build-env.compiler-image.deps.protobuf")
 
-  golang_image_full=$(get_val "build-env.compiler-image.deps.golang-image")
-  if [[ -n "${__golang_boringcrypto_image}" ]]; then
-    golang_image_full="${__golang_boringcrypto_image}"
-  fi
+  golang_image_full="${__golang_image}"
 
   log.debugvar __compiler_image_full
 
@@ -1055,9 +1053,7 @@ package()
   # For BoringCrypto, run associated hook for additional processing. This is
   # mainly about injecting the license and source code of dependencies into the
   # generated artifacts for compliance.
-  if [[ -n "${__golang_boringcrypto_image:-}" ]]; then
-    boringcrypto_hook
-  fi
+  boringcrypto_hook
 
   if ! (( ${__SKIP_DOCKER:-0} )); then
     build_docker_images
