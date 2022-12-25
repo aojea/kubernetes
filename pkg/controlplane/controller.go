@@ -101,7 +101,7 @@ func (c *completedConfig) NewBootstrapController(legacyRESTStorage corerest.Lega
 		}
 	}
 
-	systemNamespaces := []string{metav1.NamespaceSystem, metav1.NamespacePublic, corev1.NamespaceNodeLease}
+	systemNamespaces := []string{metav1.NamespaceSystem, metav1.NamespacePublic, corev1.NamespaceNodeLease, metav1.NamespaceDefault}
 
 	return &Controller{
 		client: client,
