@@ -55,8 +55,6 @@ build-env:
       # Set the <VALUE> to something low like `go1.13.0' to allow
       # experimentation with a wide range of go compilers.
       # golang-image: golang:1.19.4
-      protobuf: "3.0.2"
-      etcd: "v3.4.13"
   # This is a separate image that is used for the package-tarballs.sh step,
   # which requires Docker.
   docker-image:

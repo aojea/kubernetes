@@ -68,29 +68,10 @@ RUN echo "deb http://archive.ubuntu.com/ubuntu xenial main universe" > /etc/apt/
   && apt-get install -y build-essential \
   && for platform in ${KUBE_DYNAMIC_CROSSPLATFORMS}; do apt-get install -y crossbuild-essential-${platform}; done
 
-ARG PROTOBUF_VERSION
-ENV ZIPNAME="protoc-${PROTOBUF_VERSION}-linux-x86_64.zip"
-RUN mkdir /tmp/protoc && cd /tmp/protoc \
-  && wget "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOBUF_VERSION}/${ZIPNAME}" \
-  && unzip "${ZIPNAME}" \
-  && chmod -R +rX /tmp/protoc \
-  && cp -pr bin /usr/local \
-  && cp -pr include /usr/local \
-  && rm -rf /tmp/protoc \
-  && protoc --version
-
 # Get the code coverage tool and goimports
 RUN go install golang.org/x/tools/cmd/cover@latest \
     && go install golang.org/x/tools/cmd/goimports@latest \
     && go clean -cache
-
-# Download and symlink etcd. We need this for our integration tests.
-ARG ETCD_VERSION
-RUN mkdir -p /usr/local/src/etcd \
-  && cd /usr/local/src/etcd \
-  && curl -fsSL https://github.com/coreos/etcd/releases/download/${ETCD_VERSION}/etcd-${ETCD_VERSION}-linux-amd64.tar.gz | tar -xz \
-  && chown -R $(id -u):$(id -g) /usr/local/src/etcd \
-  && ln -s ../src/etcd/etcd-${ETCD_VERSION}-linux-amd64/etcd /usr/local/bin/
 
 # Cleanup a bit
 RUN apt-get -qqy remove \

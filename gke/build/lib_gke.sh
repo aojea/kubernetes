@@ -810,18 +810,14 @@ set_global_vars()
 # Dynamically creates a build env image tag, from the various inputs provided.
 set_compiler_image_tag()
 {
-  local etcd_version
-  local protobuf_version
   local golang_image_full
   local golang_tag
 
-  etcd_version=$(get_val "build-env.compiler-image.deps.etcd")
-  protobuf_version=$(get_val "build-env.compiler-image.deps.protobuf")
   golang_image_full="${__golang_image}"
   golang_image_only="${golang_image_full%:*}"
   golang_image_only="${golang_image_only##*/}"
   golang_tag="${golang_image_full#*:}"
-  __compiler_image_tag="${golang_image_only}-${golang_tag}-etcd-${etcd_version}-protobuf-${protobuf_version}"
+  __compiler_image_tag="${golang_image_only}-${golang_tag}"
   if (( ${#__compiler_image_tag} > 128 )); then
     # Docker tags may not exceed 128 characters.
     log.warn "__compiler_image_tag \`${__compiler_image_tag}' is over 128 characters; truncating to 128"
@@ -908,21 +904,14 @@ prepare_build_env()
   log.info "\`${__compiler_image_full}' not found locally or in GCR; building"
 
   # Build the image locally from scratch.
-  local etcd_version
   local golang_image_full
-  local protobuf_version
-
-  etcd_version=$(get_val "build-env.compiler-image.deps.etcd")
-  protobuf_version=$(get_val "build-env.compiler-image.deps.protobuf")
 
   golang_image_full="${__golang_image}"
 
   log.debugvar __compiler_image_full
 
   docker build \
-    --build-arg ETCD_VERSION="${etcd_version}" \
     --build-arg GOLANG_IMAGE="${golang_image_full}" \
-    --build-arg PROTOBUF_VERSION="${protobuf_version}" \
     -t "${__compiler_image_full}" \
     "${KUBE_ROOT}"/gke/build/cross/
 
