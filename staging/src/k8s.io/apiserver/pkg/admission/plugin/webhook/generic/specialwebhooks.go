@@ -26,6 +26,8 @@ import (
 	"fmt"
 	"os"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apiserver/pkg/admission"
 	"k8s.io/apiserver/pkg/admission/plugin/webhook"
@@ -64,6 +66,10 @@ type specialWebhooksConfig struct {
 		Users  []string `json:"users"`
 		Groups []string `json:"groups"`
 	} `json:"specialWebhookMaintainers"`
+	// ExemptResources is a list of resources that will be exempt (e.g. not
+	// dispatched) when intercepted by any webhooks (including special
+	// webhooks).
+	ExemptResources []metav1.GroupResource `json:"exemptResources"`
 }
 
 // specialWebhooksPrecomputedConfig contains configuration data for special
@@ -76,6 +82,9 @@ type specialWebhooksPrecomputedConfig struct {
 	// `buildWebhookStringID` and uniquely identifies a special webhook. This
 	// set allows efficient search of special webhooks.
 	specialWebhookStringIDSet sets.String
+	// exemptResourcesMap is a map of GroupResource, each representing a
+	// resource defined in ExemptResources.
+	exemptResourcesMap map[schema.GroupResource]bool
 }
 
 // buildWebhookStringID is used for precomputing and searching
@@ -115,10 +124,17 @@ func loadAndPrecomputeSpecialWebhooksConfig(configFile string) (precomputedConfi
 	for _, whID := range config.SpecialWebhookIdentifiers {
 		whStringIDs = append(whStringIDs, buildWebhookStringID(whID.IsMutating, whID.ConfigurationName, whID.Name))
 	}
+
+	exemptResourcesMap := map[schema.GroupResource]bool{}
+	for _, r := range config.ExemptResources {
+		exemptResourcesMap[schema.GroupResource{Group: r.Group, Resource: r.Resource}] = true
+	}
+
 	return &specialWebhooksPrecomputedConfig{
 		maintainerUsersSet:        sets.NewString(config.SpecialWebhookMaintainers.Users...),
 		maintainerGroupsSet:       sets.NewString(config.SpecialWebhookMaintainers.Groups...),
 		specialWebhookStringIDSet: sets.NewString(whStringIDs...),
+		exemptResourcesMap:        exemptResourcesMap,
 	}, nil
 }
 
@@ -151,4 +167,16 @@ func (a *Webhook) specialWebhooksFilter(attr admission.Attributes) func(input []
 		}
 		return hooks
 	}
+}
+
+// isExemptResource returns true if the input resource is in the list of
+// configured exempt resources.
+func (a *Webhook) isExemptResource(attr admission.Attributes) bool {
+	// Exit early if the config is not loaded, or no any exempt resources are set.
+	if a.specialWebhooksPrecomputedConfig == nil ||
+		len(a.specialWebhooksPrecomputedConfig.exemptResourcesMap) == 0 {
+		return false
+	}
+
+	return a.specialWebhooksPrecomputedConfig.exemptResourcesMap[attr.GetResource().GroupResource()]
 }

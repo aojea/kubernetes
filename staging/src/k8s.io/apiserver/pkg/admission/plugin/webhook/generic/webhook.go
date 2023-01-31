@@ -231,6 +231,9 @@ func (a *attrWithResourceOverride) GetResource() schema.GroupVersionResource { r
 // Dispatch is called by the downstream Validate or Admit methods.
 func (a *Webhook) Dispatch(ctx context.Context, attr admission.Attributes, o admission.ObjectInterfaces) error {
 	hookfilter := func(input []webhook.WebhookAccessor) []webhook.WebhookAccessor { return input }
+	if a.isExemptResource(attr) {
+		return nil
+	}
 	if rules.IsExemptAdmissionConfigurationResource(attr) {
 		hookfilter = a.specialWebhooksFilter(attr)
 		// A nil hookfilter indicates that no special webhooks were found to
