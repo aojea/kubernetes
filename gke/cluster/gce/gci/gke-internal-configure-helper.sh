@@ -696,9 +696,9 @@ ExecStartPre=/bin/mkdir -p ${gcfsd_mnt_dir}
 ExecStartPre=/bin/mkdir -p ${layer_cache_dir}
 ExecStartPre=/bin/mkdir -p $(dirname ${images_in_use_db_path})
 ExecStart=${KUBE_HOME}/bin/gcfsd --mount_point=${gcfsd_mnt_dir} ${gcfs_cache_size_flag} ${gcfs_layer_caching_flag} --images_in_use_db_path=${images_in_use_db_path} --enable_pull_secret_keychain
-ExecStop=/bin/umount -f ${gcfsd_mnt_dir}
+ExecStop=-/bin/umount -f ${gcfsd_mnt_dir}
 RuntimeDirectory=gcfsd
-Restart=always
+Restart=on-failure
 RestartSec=10
 [Install]
 WantedBy=multi-user.target
