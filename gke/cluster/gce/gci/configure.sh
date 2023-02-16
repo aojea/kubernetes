@@ -691,9 +691,9 @@ function install-gcfsd {
     RIPTIDE_FUSE_STORE_PATH="https://storage.googleapis.com/${RIPTIDE_FUSE_BUCKET}/gcfsd/${RIPTIDE_FUSE_VERSION}"
   fi
 
-  if [[ "${RIPTIDE_FUSE_VERSION}" > v0.19.0 ]] && [[ "${RIPTIDE_FUSE_VERSION}" != v0.4.0 ]] ; then
-    download-or-bust "" "${RIPTIDE_FUSE_STORE_PATH}/gcfsd.tar.gz"
-  fi
+  echo "Downloading tarball for gcfsd"
+  download-or-bust "" "${RIPTIDE_FUSE_STORE_PATH}/gcfsd.tar.gz"
+
   download-or-bust "" "${RIPTIDE_FUSE_STORE_PATH}/gcfsd"
   mv "${KUBE_HOME}/gcfsd" "${KUBE_HOME}/bin/gcfsd"
   chmod a+x "${KUBE_HOME}/bin/gcfsd"
@@ -707,9 +707,9 @@ function install-riptide-snapshotter {
     return
   fi
   RIPTIDE_SNAPSHOTTER_STORE_PATH="https://storage.googleapis.com/${RIPTIDE_SNAPSHOTTER_BUCKET}/gcfs-snapshotter/${RIPTIDE_SNAPSHOTTER_VERSION}"
-  if [[ "${RIPTIDE_SNAPSHOTTER_VERSION}" > v1.4-2 ]]; then
-    download-or-bust "" "${RIPTIDE_SNAPSHOTTER_STORE_PATH}/containerd-gcfs-grpc.tar.gz"
-  fi
+
+  echo "Downloading tarball for riptide-snapshotter"
+  download-or-bust "" "${RIPTIDE_SNAPSHOTTER_STORE_PATH}/containerd-gcfs-grpc.tar.gz"
 
   if [[ "${HOST_ARCH}" == "arm64" ]]; then
     RIPTIDE_SNAPSHOTTER_BINARY="containerd-gcfs-grpc-arm64"
