@@ -17,6 +17,7 @@ function install-npd-custom-plugins {
   local -r dir="${KUBE_HOME}/npd-custom-plugins"
   mkdir -p "${dir}"
   tar xzf "${KUBE_HOME}/${tar}" -C "${dir}" --overwrite
+  rm -f "${KUBE_HOME}/${tar}"
 }
 
 function record-preload-info {
