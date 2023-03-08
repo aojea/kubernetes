@@ -367,6 +367,10 @@ function start-kube-apiserver {
     container_env="\"env\":[${container_env}],"
   fi
 
+  # Create directory for debug socket.
+  mkdir -p /etc/srv/kubernetes/kube-apiserver/
+  chown -R "${KUBE_API_SERVER_RUNASUSER:-0}":"${KUBE_API_SERVER_RUNASGROUP:-0}" /etc/srv/kubernetes/kube-apiserver/
+
   local -r src_file="${src_dir}/kube-apiserver.manifest"
 
   # params is passed by reference, so no "$"
