@@ -46,7 +46,14 @@ GKE_CONTAINERD_INFRA_CONTAINER="${CONTAINERD_INFRA_CONTAINER:-gke.gcr.io/pause:3
 RIPTIDE_FUSE_BUCKET="${RIPTIDE_FUSE_BUCKET:-gke-release}"
 RIPTIDE_SNAPSHOTTER_BUCKET="${RIPTIDE_SNAPSHOTTER_BUCKET:-gke-release}"
 RIPTIDE_FUSE_VERSION="${RIPTIDE_FUSE_VERSION:-v0.150.0}"
+RIPTIDE_FUSE_ARM64_SHA512='abe4e6d03905acdee186b3a8453fe8c931ee053cef144e7adbd88dba973ee43d14bab1392ec6d53501cb96b47fe932f285b4bf9d1396864535dc1b6cec77b5fb'
+RIPTIDE_FUSE_BIN_ARM64_SHA512='3fae378f133ed5adf7a5866ceadd618747c8891ecf6bb5161d7b9efeec7c2d9df4d33be234d5734873838ac47094ec3868f47ecfb3903e8c82e45a240acee794'
+RIPTIDE_FUSE_AMD64_SHA512='a7250702083ed92e131d01931a9d68e4de672babbfc1f78de51195d464e82299ed7299e4fad6bddfcfecb23b0087cb3eb20fbbf042497b5bf7835df191018039'
+RIPTIDE_FUSE_BIN_AMD64_SHA512='d89b58590f33ec21f2e593481aeaab9a00b695757b41263b24eeea166cbc3443e72e8b1eb895d5d56610477482c6f8a6cddcdc61ced18cf21721e9fea6c166c8'
 RIPTIDE_SNAPSHOTTER_VERSION="${RIPTIDE_SNAPSHOTTER_VERSION:-v1.4-25}"
+RIPTIDE_SNAPSHOTTER_SHA512='67ca748d45bd7a73ba24773d990aad76656d652aaebff07507b279a77d2a86fd51571eae664a75fa2204f750a25f8070b99cc3df135fd3aa2e206478a8b88098'
+RIPTIDE_SNAPSHOTTER_BIN_ARM64_SHA512='28dd96113793c86b485f2a11b9127225e8cb6a0c861c645a04d72052e792a384503bfc1aa6f3241461d6b4a80bbfb6444e7e2efbb6a476b4b249005e00950d00'
+RIPTIDE_SNAPSHOTTER_BIN_AMD64_SHA512='ed015760f16fccb99091c4a4daf4e2898fb2e107f54ac3c7ddf10d3d9c1d3017c24d6a1dc0b8b6061e2dd1400204969ad3a41ff02a28a11c0e70e04d6d12ecf1'
 
 # Standard curl flags.
 CURL_FLAGS='--fail --silent --show-error --retry 5 --retry-delay 3 --connect-timeout 10 --retry-connrefused'
@@ -687,14 +694,18 @@ function install-gcfsd {
 
   if [[ "${HOST_ARCH}" == "arm64" ]]; then
     RIPTIDE_FUSE_STORE_PATH="https://storage.googleapis.com/${RIPTIDE_FUSE_BUCKET}/gcfsd/${RIPTIDE_FUSE_VERSION}/arm64"
+    TAR_SHA="${RIPTIDE_FUSE_ARM64_SHA512}"
+    BIN_SHA="${RIPTIDE_FUSE_BIN_ARM64_SHA512}"
   else
     RIPTIDE_FUSE_STORE_PATH="https://storage.googleapis.com/${RIPTIDE_FUSE_BUCKET}/gcfsd/${RIPTIDE_FUSE_VERSION}"
+    TAR_SHA="${RIPTIDE_FUSE_AMD64_SHA512}"
+    BIN_SHA="${RIPTIDE_FUSE_BIN_AMD64_SHA512}"
   fi
 
   echo "Downloading tarball for gcfsd"
-  download-or-bust "" "${RIPTIDE_FUSE_STORE_PATH}/gcfsd.tar.gz"
+  download-or-bust "${TAR_SHA}" "${RIPTIDE_FUSE_STORE_PATH}/gcfsd.tar.gz"
 
-  download-or-bust "" "${RIPTIDE_FUSE_STORE_PATH}/gcfsd"
+  download-or-bust "${BIN_SHA}" "${RIPTIDE_FUSE_STORE_PATH}/gcfsd"
   mv "${KUBE_HOME}/gcfsd" "${KUBE_HOME}/bin/gcfsd"
   chmod a+x "${KUBE_HOME}/bin/gcfsd"
   record-preload-info "gcfsd" "${RIPTIDE_FUSE_VERSION}"
@@ -709,15 +720,17 @@ function install-riptide-snapshotter {
   RIPTIDE_SNAPSHOTTER_STORE_PATH="https://storage.googleapis.com/${RIPTIDE_SNAPSHOTTER_BUCKET}/gcfs-snapshotter/${RIPTIDE_SNAPSHOTTER_VERSION}"
 
   echo "Downloading tarball for riptide-snapshotter"
-  download-or-bust "" "${RIPTIDE_SNAPSHOTTER_STORE_PATH}/containerd-gcfs-grpc.tar.gz"
+  download-or-bust "${RIPTIDE_SNAPSHOTTER_SHA512}" "${RIPTIDE_SNAPSHOTTER_STORE_PATH}/containerd-gcfs-grpc.tar.gz"
 
   if [[ "${HOST_ARCH}" == "arm64" ]]; then
     RIPTIDE_SNAPSHOTTER_BINARY="containerd-gcfs-grpc-arm64"
+    RIPTIDE_SNAPSHOTTER_BIN_SHA512="${RIPTIDE_SNAPSHOTTER_BIN_ARM64_SHA512}"
   else
     RIPTIDE_SNAPSHOTTER_BINARY="containerd-gcfs-grpc"
+    RIPTIDE_SNAPSHOTTER_BIN_SHA512="${RIPTIDE_SNAPSHOTTER_BIN_AMD64_SHA512}"
   fi
 
-  download-or-bust "" "${RIPTIDE_SNAPSHOTTER_STORE_PATH}/${RIPTIDE_SNAPSHOTTER_BINARY}"
+  download-or-bust "${RIPTIDE_SNAPSHOTTER_BIN_SHA512}" "${RIPTIDE_SNAPSHOTTER_STORE_PATH}/${RIPTIDE_SNAPSHOTTER_BINARY}"
   mv "${KUBE_HOME}/${RIPTIDE_SNAPSHOTTER_BINARY}" "${KUBE_HOME}/bin/containerd-gcfs-grpc"
   chmod a+x "${KUBE_HOME}/bin/containerd-gcfs-grpc"
   record-preload-info "containerd-gcfs-grpc" "${RIPTIDE_SNAPSHOTTER_VERSION}"
