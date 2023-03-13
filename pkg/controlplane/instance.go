@@ -81,6 +81,7 @@ import (
 	"k8s.io/kubernetes/pkg/controlplane/apiserver/options"
 	"k8s.io/kubernetes/pkg/controlplane/controller/apiserverleasegc"
 	"k8s.io/kubernetes/pkg/controlplane/controller/clusterauthenticationtrust"
+	"k8s.io/kubernetes/pkg/controlplane/controller/defaultservicecidr"
 	"k8s.io/kubernetes/pkg/controlplane/controller/kubernetesservice"
 	"k8s.io/kubernetes/pkg/controlplane/controller/legacytokentracking"
 	"k8s.io/kubernetes/pkg/controlplane/controller/systemnamespaces"
@@ -509,6 +510,20 @@ func (c completedConfig) New(delegationTarget genericapiserver.DelegationTarget)
 		kubernetesServiceCtrl.Stop()
 		return nil
 	})
+
+	if utilfeature.DefaultFeatureGate.Enabled(features.MultiCIDRServiceAllocator) {
+		m.GenericAPIServer.AddPostStartHookOrDie("start-kubernetes-service-cidr-controller", func(hookContext genericapiserver.PostStartHookContext) error {
+			controller := defaultservicecidr.NewController(
+				c.ExtraConfig.ServiceIPRange,
+				c.ExtraConfig.SecondaryServiceIPRange,
+				clientset,
+			)
+			// The default serviceCIDR must exist before the apiserver is healthy
+			// otherwise the allocators for Services will not work.
+			controller.Start(hookContext.StopCh)
+			return nil
+		})
+	}
 
 	if utilfeature.DefaultFeatureGate.Enabled(features.UnknownVersionInteroperabilityProxy) {
 		peeraddress := getPeerAddress(c.ExtraConfig.PeerAdvertiseAddress, c.GenericConfig.PublicAddress, publicServicePort)
