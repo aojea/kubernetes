@@ -233,11 +233,7 @@ fi
 
 # Optional: Enable node logging.
 export ENABLE_NODE_LOGGING="${KUBE_ENABLE_NODE_LOGGING:-true}"
-export LOGGING_DESTINATION="${KUBE_LOGGING_DESTINATION:-gcp}" # options: elasticsearch, gcp
-
-# Optional: When set to true, Elasticsearch and Kibana will be setup as part of the cluster bring up.
-export ENABLE_CLUSTER_LOGGING="${KUBE_ENABLE_CLUSTER_LOGGING:-true}"
-export ELASTICSEARCH_LOGGING_REPLICAS=1
+export LOGGING_DESTINATION="${KUBE_LOGGING_DESTINATION:-gcp}" # options: gcp
 
 # Optional: Don't require https for registries in our local RFC1918 network
 if [[ ${KUBE_ENABLE_INSECURE_REGISTRY:-false} == "true" ]]; then
