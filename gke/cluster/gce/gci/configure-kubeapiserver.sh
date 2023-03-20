@@ -381,6 +381,11 @@ function start-kube-apiserver {
     healthcheck_ip=$(hostname -i)
   fi
 
+  local termination_grace_period_seconds=""
+  if [[ -n "${KUBE_APISERVER_TERMINATION_GRACE_PERIOD_SECONDS:-}" ]]; then
+    termination_grace_period_seconds="\"terminationGracePeriodSeconds\": ${KUBE_APISERVER_TERMINATION_GRACE_PERIOD_SECONDS},"
+  fi
+
   params="$(convert-manifest-params "${params}")"
   # Evaluate variables.
   local -r kube_apiserver_docker_tag="${KUBE_API_SERVER_DOCKER_TAG:-$(cat /home/kubernetes/kube-docker-files/kube-apiserver.docker_tag)}"
@@ -413,6 +418,7 @@ function start-kube-apiserver {
   sed -i -e "s@{{konnectivity_socket_mount}}@${default_konnectivity_socket_mnt}@g" "${src_file}"
   sed -i -e "s@{{konnectivity_socket_volume}}@${default_konnectivity_socket_vol}@g" "${src_file}"
   sed -i -e "s@{{healthcheck_ip}}@${healthcheck_ip}@g" "${src_file}"
+  sed -i -e "s@{{termination_grace_period_seconds}}@${termination_grace_period_seconds}@g" "${src_file}"
 
   if [[ -n "${KUBE_API_SERVER_RUNASUSER:-}" && -n "${KUBE_API_SERVER_RUNASGROUP:-}" && -n "${KUBE_PKI_READERS_GROUP:-}" ]]; then
     sed -i -e "s@{{runAsUser}}@\"runAsUser\": ${KUBE_API_SERVER_RUNASUSER},@g" "${src_file}"
