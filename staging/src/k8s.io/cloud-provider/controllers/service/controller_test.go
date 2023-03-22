@@ -106,7 +106,6 @@ func newController() (*Controller, *fakecloud.Cloud, *fake.Clientset) {
 		cloud:            cloud,
 		kubeClient:       kubeClient,
 		clusterName:      "test-cluster",
-		cache:            &serviceCache{serviceMap: make(map[string]*cachedService)},
 		eventBroadcaster: broadcaster,
 		eventRecorder:    recorder,
 		nodeLister:       newFakeNodeLister(nil),
@@ -138,7 +137,6 @@ func TestSyncLoadBalancerIfNeeded(t *testing.T) {
 		desc                 string
 		service              *v1.Service
 		lbExists             bool
-		expectOp             loadBalancerOperation
 		expectCreateAttempt  bool
 		expectDeleteAttempt  bool
 		expectPatchStatus    bool
@@ -155,7 +153,6 @@ func TestSyncLoadBalancerIfNeeded(t *testing.T) {
 					Type: v1.ServiceTypeClusterIP,
 				},
 			},
-			expectOp:          deleteLoadBalancer,
 			expectPatchStatus: false,
 		},
 		{
@@ -177,7 +174,6 @@ func TestSyncLoadBalancerIfNeeded(t *testing.T) {
 				},
 			},
 			lbExists:            true,
-			expectOp:            deleteLoadBalancer,
 			expectDeleteAttempt: true,
 			expectPatchStatus:   true,
 		},
@@ -196,7 +192,6 @@ func TestSyncLoadBalancerIfNeeded(t *testing.T) {
 					Type: v1.ServiceTypeLoadBalancer,
 				},
 			},
-			expectOp:             ensureLoadBalancer,
 			expectCreateAttempt:  true,
 			expectPatchStatus:    true,
 			expectPatchFinalizer: true,
@@ -216,7 +211,6 @@ func TestSyncLoadBalancerIfNeeded(t *testing.T) {
 					Type: v1.ServiceTypeLoadBalancer,
 				},
 			},
-			expectOp:             ensureLoadBalancer,
 			expectCreateAttempt:  true,
 			expectPatchStatus:    true,
 			expectPatchFinalizer: true,
@@ -236,7 +230,6 @@ func TestSyncLoadBalancerIfNeeded(t *testing.T) {
 					Type: v1.ServiceTypeLoadBalancer,
 				},
 			},
-			expectOp:             ensureLoadBalancer,
 			expectCreateAttempt:  true,
 			expectPatchStatus:    true,
 			expectPatchFinalizer: true,
@@ -253,7 +246,6 @@ func TestSyncLoadBalancerIfNeeded(t *testing.T) {
 					LoadBalancerClass: utilpointer.StringPtr("custom-loadbalancer"),
 				},
 			},
-			expectOp:             deleteLoadBalancer,
 			expectCreateAttempt:  false,
 			expectPatchStatus:    false,
 			expectPatchFinalizer: false,
@@ -274,7 +266,6 @@ func TestSyncLoadBalancerIfNeeded(t *testing.T) {
 					LoadBalancerClass: nil,
 				},
 			},
-			expectOp:             ensureLoadBalancer,
 			expectCreateAttempt:  true,
 			expectPatchStatus:    true,
 			expectPatchFinalizer: true,
@@ -300,7 +291,6 @@ func TestSyncLoadBalancerIfNeeded(t *testing.T) {
 				},
 			},
 			lbExists:             true,
-			expectOp:             deleteLoadBalancer,
 			expectDeleteAttempt:  true,
 			expectPatchStatus:    true,
 			expectPatchFinalizer: true,
@@ -332,7 +322,6 @@ func TestSyncLoadBalancerIfNeeded(t *testing.T) {
 				},
 			},
 			lbExists:             true,
-			expectOp:             deleteLoadBalancer,
 			expectDeleteAttempt:  true,
 			expectPatchStatus:    true,
 			expectPatchFinalizer: true,
@@ -352,7 +341,6 @@ func TestSyncLoadBalancerIfNeeded(t *testing.T) {
 					Type: v1.ServiceTypeLoadBalancer,
 				},
 			},
-			expectOp:             ensureLoadBalancer,
 			expectCreateAttempt:  true,
 			expectPatchStatus:    true,
 			expectPatchFinalizer: true,
@@ -373,7 +361,6 @@ func TestSyncLoadBalancerIfNeeded(t *testing.T) {
 					Type: v1.ServiceTypeLoadBalancer,
 				},
 			},
-			expectOp:             ensureLoadBalancer,
 			expectCreateAttempt:  true,
 			expectPatchStatus:    true,
 			expectPatchFinalizer: false,
@@ -392,7 +379,7 @@ func TestSyncLoadBalancerIfNeeded(t *testing.T) {
 			}
 			client.ClearActions()
 
-			op, err := controller.syncLoadBalancerIfNeeded(ctx, tc.service, key)
+			op, err := controller.syncLoadBalancerIfNeeded(ctx, tc.service)
 			if err != nil {
 				t.Errorf("Got error: %v, want nil", err)
 			}
@@ -1070,8 +1057,6 @@ func TestProcessServiceCreateOrUpdate(t *testing.T) {
 			key:      "validKey",
 			svc:      defaultExternalService(),
 			updateFn: func(svc *v1.Service) *v1.Service {
-
-				controller.cache.getOrCreate("validKey")
 				return svc
 
 			},
@@ -1091,8 +1076,6 @@ func TestProcessServiceCreateOrUpdate(t *testing.T) {
 				controller.enqueueService(svc)
 				cachedServiceTest := controller.cache.getOrCreate(keyExpected)
 				cachedServiceTest.state = svc
-				controller.cache.set(keyExpected, cachedServiceTest)
-
 				keyGot, quit := controller.serviceQueue.Get()
 				if quit {
 					t.Fatalf("get no queue element")
