@@ -17,13 +17,3 @@ function install-npd-custom-plugins {
   tar xzf "${KUBE_HOME}/${tar}" -C "${dir}" --overwrite
   rm -f "${KUBE_HOME}/${tar}"
 }
-
-function record-preload-info {
-  echo "$1,$2" >> "${KUBE_HOME}/preload_info"
-}
-
-function is-preloaded {
-  local -r key=$1
-  local -r value=$2
-  grep -qs "${key},${value}" "${KUBE_HOME}/preload_info"
-}
