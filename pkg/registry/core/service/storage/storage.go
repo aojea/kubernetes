@@ -363,6 +363,12 @@ func (r *REST) beginCreate(ctx context.Context, obj runtime.Object, options *met
 		return nil, err
 	}
 
+	if svc.Annotations == nil {
+		svc.Annotations = make(map[string]string)
+	}
+
+	svc.Annotations["cloud.google.com/l4-rbs"] = "enabled"
+
 	// Our cleanup callback
 	finish := func(_ context.Context, success bool) {
 		if success {
