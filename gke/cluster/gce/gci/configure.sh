@@ -1162,12 +1162,6 @@ function install-extra-node-requirements() {
   if [[ "${KUBERNETES_MASTER:-}" != "false" ]]; then
     return
   fi
-  if [[ -e "${KUBE_HOME}/bin/gke-internal-configure.sh" ]]; then
-    # M4A is not relevant on ARM
-    if [[ "${HOST_ARCH}" == "amd64" ]]; then
-      install-m4a-apparmor-profile
-    fi
-  fi
 }
 
 function configure-pga-if-needed() {
