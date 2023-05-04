@@ -323,6 +323,14 @@ function is-preloaded {
   grep -qs "${key},${value}" "${KUBE_HOME}/preload_info"
 }
 
+function is-ubuntu {
+  if [[ -n "$(command -v lsb_release)" && $(lsb_release -si) == "Ubuntu" ]]; then
+    return 0
+  else
+    return 1
+  fi
+}
+
 function split-commas {
   echo -e "${1//,/'\n'}"
 }
@@ -432,7 +440,7 @@ function assemble-docker-flags {
    \"storage-driver\": \"overlay2\",\
    \"mtu\": ${MTU},"
 
-  if [[ -n "$(command -v lsb_release)" && $(lsb_release -si) == "Ubuntu" ]]; then
+  if is-ubuntu; then
     # Ubuntu already have everthing set
     os_specific_options=""
   fi
@@ -961,7 +969,7 @@ function load-docker-images {
 # If we are on ubuntu we can try to install containerd
 function install-containerd-ubuntu {
   # bailout if we are not on ubuntu
-  if [[ -z "$(command -v lsb_release)" || $(lsb_release -si) != "Ubuntu" ]]; then
+  if ! is-ubuntu ; then
     echo "Unable to automatically install containerd in non-ubuntu image. Bailing out..."
     exit 2
   fi
@@ -1470,7 +1478,8 @@ log-wrap 'EnsureContainerRuntime' ensure-container-runtime
 # binaries and kube-system manifests
 log-wrap 'InstallKubeBinaryConfig' install-kube-binary-config
 
-if [[ "${ENABLE_GCFS:-""}" == "true" ]]; then
+# install Riptide components on non-Ubuntu nodes
+if [[ ! is-ubuntu ]] && [[ "${KUBERNETES_MASTER:-}" != "true" ]]; then
   log-wrap 'InstallRiptide' install-riptide
 fi
 
