@@ -379,6 +379,10 @@ EOF
     params+=" --egress-selector-config-file=/etc/srv/kubernetes/egress_selector_configuration.yaml"
   fi
 
+  if [[ -n "${KUBE_APISERVER_VERSION:-}" ]]; then
+    params+=" --version=${KUBE_APISERVER_VERSION}"
+  fi
+
   local container_env=""
   if [[ -n "${ENABLE_CACHE_MUTATION_DETECTOR:-}" ]]; then
     container_env+="{\"name\": \"KUBE_CACHE_MUTATION_DETECTOR\", \"value\": \"${ENABLE_CACHE_MUTATION_DETECTOR}\"}"
