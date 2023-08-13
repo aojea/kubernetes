@@ -27,12 +27,3 @@ const (
 	InsufficientNumberOfEndpoints         = "Insufficient number of endpoints"
 	MinAllocationExceedsOverloadThreshold = "Unable to allocate minimum required endpoints to each zone without exceeding overload threshold"
 )
-
-// EventBuilder let's us construct events in the code.
-// We use it to build events and return them from a function instead of publishing them from within it.
-// EventType, Reason, and Message fields are equivalent to the v1.Event fields - https://pkg.go.dev/k8s.io/api/core/v1#Event.
-type EventBuilder struct {
-	EventType string
-	Reason    string
-	Message   string
-}
