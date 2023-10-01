@@ -233,11 +233,11 @@ type Option func(*Kubelet)
 type Bootstrap interface {
 	GetConfiguration() kubeletconfiginternal.KubeletConfiguration
 	BirthCry()
-	StartGarbageCollection()
-	ListenAndServe(kubeCfg *kubeletconfiginternal.KubeletConfiguration, tlsOptions *server.TLSOptions, auth server.AuthInterface, tp trace.TracerProvider)
-	ListenAndServeReadOnly(address net.IP, port uint)
-	ListenAndServePodResources()
-	Run(<-chan kubetypes.PodUpdate)
+	StartGarbageCollection(ctx context.Context)
+	ListenAndServe(ctx context.Context, kubeCfg *kubeletconfiginternal.KubeletConfiguration, tlsOptions *server.TLSOptions, auth server.AuthInterface, tp trace.TracerProvider)
+	ListenAndServeReadOnly(ctx context.Context, address net.IP, port uint)
+	ListenAndServePodResources(ctx context.Context)
+	Run(ctx context.Context, podCh <-chan kubetypes.PodUpdate)
 	RunOnce(<-chan kubetypes.PodUpdate) ([]RunPodResult, error)
 }
 
@@ -334,7 +334,8 @@ func PreInitRuntimeService(kubeCfg *kubeletconfiginternal.KubeletConfiguration, 
 
 // NewMainKubelet instantiates a new Kubelet object along with all the required internal modules.
 // No initialization of Kubelet and its modules should happen here.
-func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
+func NewMainKubelet(ctx context.Context,
+	kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	kubeDeps *Dependencies,
 	crOptions *config.ContainerRuntimeOptions,
 	hostname string,
@@ -362,7 +363,6 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	nodeStatusMaxImages int32,
 	seccompDefault bool,
 ) (*Kubelet, error) {
-	ctx := context.Background()
 	logger := klog.TODO()
 
 	if rootDirectory == "" {
@@ -390,7 +390,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		nodeHasSynced = func() bool {
 			return kubeInformers.Core().V1().Nodes().Informer().HasSynced()
 		}
-		kubeInformers.Start(wait.NeverStop)
+		kubeInformers.Start(ctx.Done())
 		klog.InfoS("Attempting to sync node with API server")
 	} else {
 		// we don't have a client to sync!
@@ -447,7 +447,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		kubeInformers := informers.NewSharedInformerFactory(kubeDeps.KubeClient, 0)
 		serviceLister = kubeInformers.Core().V1().Services().Lister()
 		serviceHasSynced = kubeInformers.Core().V1().Services().Informer().HasSynced
-		kubeInformers.Start(wait.NeverStop)
+		kubeInformers.Start(ctx.Done())
 	} else {
 		serviceIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
 		serviceLister = corelisters.NewServiceLister(serviceIndexer)
@@ -1399,10 +1399,9 @@ func (kl *Kubelet) setupDataDirs() error {
 }
 
 // StartGarbageCollection starts garbage collection threads.
-func (kl *Kubelet) StartGarbageCollection() {
+func (kl *Kubelet) StartGarbageCollection(ctx context.Context) {
 	loggedContainerGCFailure := false
 	go wait.Until(func() {
-		ctx := context.Background()
 		if err := kl.containerGC.GarbageCollect(ctx); err != nil {
 			klog.ErrorS(err, "Container garbage collection failed")
 			kl.recorder.Eventf(kl.nodeRef, v1.EventTypeWarning, events.ContainerGCFailed, err.Error())
@@ -1416,7 +1415,7 @@ func (kl *Kubelet) StartGarbageCollection() {
 
 			klog.V(vLevel).InfoS("Container garbage collection succeeded")
 		}
-	}, ContainerGCPeriod, wait.NeverStop)
+	}, ContainerGCPeriod, ctx.Done())
 
 	// when the high threshold is set to 100, stub the image GC manager
 	if kl.kubeletConfiguration.ImageGCHighThresholdPercent == 100 {
@@ -1426,7 +1425,6 @@ func (kl *Kubelet) StartGarbageCollection() {
 
 	prevImageGCFailed := false
 	go wait.Until(func() {
-		ctx := context.Background()
 		if err := kl.imageManager.GarbageCollect(ctx); err != nil {
 			if prevImageGCFailed {
 				klog.ErrorS(err, "Image garbage collection failed multiple times in a row")
@@ -1445,7 +1443,7 @@ func (kl *Kubelet) StartGarbageCollection() {
 
 			klog.V(vLevel).InfoS("Image garbage collection succeeded")
 		}
-	}, ImageGCPeriod, wait.NeverStop)
+	}, ImageGCPeriod, ctx.Done())
 }
 
 // initializeModules will initialize internal modules that do not require the container runtime to be up.
@@ -1543,8 +1541,7 @@ func (kl *Kubelet) initializeRuntimeDependentModules() {
 }
 
 // Run starts the kubelet reacting to config updates
-func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
-	ctx := context.Background()
+func (kl *Kubelet) Run(ctx context.Context, updates <-chan kubetypes.PodUpdate) {
 	if kl.logServer == nil {
 		file := http.FileServer(http.Dir(nodeLogDir))
 		if utilfeature.DefaultFeatureGate.Enabled(features.NodeLogQuery) && kl.kubeletConfiguration.EnableSystemLogQuery {
@@ -1586,7 +1583,7 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 
 	// Start the cloud provider sync manager
 	if kl.cloudResourceSyncManager != nil {
-		go kl.cloudResourceSyncManager.Run(wait.NeverStop)
+		go kl.cloudResourceSyncManager.Run(ctx.Done())
 	}
 
 	if err := kl.initializeModules(); err != nil {
@@ -1596,7 +1593,7 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 	}
 
 	// Start volume manager
-	go kl.volumeManager.Run(kl.sourcesReady, wait.NeverStop)
+	go kl.volumeManager.Run(kl.sourcesReady, ctx.Done())
 
 	if kl.kubeClient != nil {
 		// Start two go-routines to update the status.
@@ -1608,13 +1605,13 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 		// Introduce some small jittering to ensure that over time the requests won't start
 		// accumulating at approximately the same time from the set of nodes due to priority and
 		// fairness effect.
-		go wait.JitterUntil(kl.syncNodeStatus, kl.nodeStatusUpdateFrequency, 0.04, true, wait.NeverStop)
-		go kl.fastStatusUpdateOnce()
+		go wait.JitterUntil(kl.syncNodeStatus, kl.nodeStatusUpdateFrequency, 0.04, true, ctx.Done())
+		go kl.fastStatusUpdateOnce(ctx)
 
 		// start syncing lease
 		go kl.nodeLeaseController.Run(context.Background())
 	}
-	go wait.Until(kl.updateRuntimeUp, 5*time.Second, wait.NeverStop)
+	go wait.Until(kl.updateRuntimeUp, 5*time.Second, ctx.Done())
 
 	// Set up iptables util rules
 	if kl.makeIPTablesUtilChains {
@@ -1626,7 +1623,7 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 
 	// Start syncing RuntimeClasses if enabled.
 	if kl.runtimeClassManager != nil {
-		kl.runtimeClassManager.Start(wait.NeverStop)
+		kl.runtimeClassManager.Start(ctx.Done())
 	}
 
 	// Start the pod lifecycle event generator.
@@ -2893,18 +2890,18 @@ func (kl *Kubelet) ResyncInterval() time.Duration {
 }
 
 // ListenAndServe runs the kubelet HTTP server.
-func (kl *Kubelet) ListenAndServe(kubeCfg *kubeletconfiginternal.KubeletConfiguration, tlsOptions *server.TLSOptions,
+func (kl *Kubelet) ListenAndServe(ctx context.Context, kubeCfg *kubeletconfiginternal.KubeletConfiguration, tlsOptions *server.TLSOptions,
 	auth server.AuthInterface, tp trace.TracerProvider) {
 	server.ListenAndServeKubeletServer(kl, kl.resourceAnalyzer, kubeCfg, tlsOptions, auth, tp)
 }
 
 // ListenAndServeReadOnly runs the kubelet HTTP server in read-only mode.
-func (kl *Kubelet) ListenAndServeReadOnly(address net.IP, port uint) {
+func (kl *Kubelet) ListenAndServeReadOnly(ctx context.Context, address net.IP, port uint) {
 	server.ListenAndServeKubeletReadOnlyServer(kl, kl.resourceAnalyzer, address, port)
 }
 
 // ListenAndServePodResources runs the kubelet podresources grpc service
-func (kl *Kubelet) ListenAndServePodResources() {
+func (kl *Kubelet) ListenAndServePodResources(ctx context.Context) {
 	endpoint, err := util.LocalEndpoint(kl.getPodResourcesDir(), podresources.Socket)
 	if err != nil {
 		klog.V(2).InfoS("Failed to get local endpoint for PodResources endpoint", "err", err)
@@ -2936,8 +2933,7 @@ func (kl *Kubelet) cleanUpContainersInPod(podID types.UID, exitedContainerID str
 // Function returns after the node status update after such event, or when the node is already ready.
 // Function is executed only during Kubelet start which improves latency to ready node by updating
 // kubelet state, runtime status and node statuses ASAP.
-func (kl *Kubelet) fastStatusUpdateOnce() {
-	ctx := context.Background()
+func (kl *Kubelet) fastStatusUpdateOnce(ctx context.Context) {
 	start := kl.clock.Now()
 	stopCh := make(chan struct{})
 

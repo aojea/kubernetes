@@ -844,7 +844,7 @@ func run(ctx context.Context, s *options.KubeletServer, kubeDeps *kubelet.Depend
 		klog.InfoS("Failed to ApplyOOMScoreAdj", "err", err)
 	}
 
-	if err := RunKubelet(s, kubeDeps, s.RunOnce); err != nil {
+	if err := RunKubelet(ctx, s, kubeDeps, s.RunOnce); err != nil {
 		return err
 	}
 
@@ -856,7 +856,7 @@ func run(ctx context.Context, s *options.KubeletServer, kubeDeps *kubelet.Depend
 			if err != nil {
 				klog.ErrorS(err, "Failed to start healthz server")
 			}
-		}, 5*time.Second, wait.NeverStop)
+		}, 5*time.Second, ctx.Done())
 	}
 
 	if s.RunOnce {
@@ -936,7 +936,7 @@ func buildKubeletClientConfig(ctx context.Context, s *options.KubeletServer, tp 
 		// we set exitAfter to five minutes because we use this client configuration to request new certs - if we are unable
 		// to request new certs, we will be unable to continue normal operation. Exiting the process allows a wrapper
 		// or the bootstrapping credentials to potentially lay down new initial config.
-		closeAllConns, err := kubeletcertificate.UpdateTransport(wait.NeverStop, transportConfig, clientCertificateManager, 5*time.Minute)
+		closeAllConns, err := kubeletcertificate.UpdateTransport(ctx.Done(), transportConfig, clientCertificateManager, 5*time.Minute)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -1175,7 +1175,7 @@ func setContentTypeForClient(cfg *restclient.Config, contentType string) {
 //	3 Standalone 'kubernetes' binary
 //
 // Eventually, #2 will be replaced with instances of #3
-func RunKubelet(kubeServer *options.KubeletServer, kubeDeps *kubelet.Dependencies, runOnce bool) error {
+func RunKubelet(ctx context.Context, kubeServer *options.KubeletServer, kubeDeps *kubelet.Dependencies, runOnce bool) error {
 	hostname, err := nodeutil.GetHostname(kubeServer.HostnameOverride)
 	if err != nil {
 		return err
@@ -1233,27 +1233,28 @@ func RunKubelet(kubeServer *options.KubeletServer, kubeDeps *kubelet.Dependencie
 		}
 		klog.InfoS("Started kubelet as runonce")
 	} else {
-		startKubelet(k, podCfg, &kubeServer.KubeletConfiguration, kubeDeps, kubeServer.EnableServer)
+		startKubelet(ctx, k, podCfg, &kubeServer.KubeletConfiguration, kubeDeps, kubeServer.EnableServer)
 		klog.InfoS("Started kubelet")
 	}
 	return nil
 }
 
-func startKubelet(k kubelet.Bootstrap, podCfg *config.PodConfig, kubeCfg *kubeletconfiginternal.KubeletConfiguration, kubeDeps *kubelet.Dependencies, enableServer bool) {
+func startKubelet(ctx context.Context, k kubelet.Bootstrap, podCfg *config.PodConfig, kubeCfg *kubeletconfiginternal.KubeletConfiguration, kubeDeps *kubelet.Dependencies, enableServer bool) {
 	// start the kubelet
-	go k.Run(podCfg.Updates())
+	go k.Run(ctx, podCfg.Updates())
 
 	// start the kubelet server
 	if enableServer {
-		go k.ListenAndServe(kubeCfg, kubeDeps.TLSOptions, kubeDeps.Auth, kubeDeps.TracerProvider)
+		go k.ListenAndServe(ctx, kubeCfg, kubeDeps.TLSOptions, kubeDeps.Auth, kubeDeps.TracerProvider)
 	}
 	if kubeCfg.ReadOnlyPort > 0 {
-		go k.ListenAndServeReadOnly(netutils.ParseIPSloppy(kubeCfg.Address), uint(kubeCfg.ReadOnlyPort))
+		go k.ListenAndServeReadOnly(ctx, netutils.ParseIPSloppy(kubeCfg.Address), uint(kubeCfg.ReadOnlyPort))
 	}
-	go k.ListenAndServePodResources()
+	go k.ListenAndServePodResources(ctx)
 }
 
-func createAndInitKubelet(kubeServer *options.KubeletServer,
+func createAndInitKubelet(ctx context.Context,
+	kubeServer *options.KubeletServer,
 	kubeDeps *kubelet.Dependencies,
 	hostname string,
 	hostnameOverridden bool,
@@ -1262,7 +1263,7 @@ func createAndInitKubelet(kubeServer *options.KubeletServer,
 	// TODO: block until all sources have delivered at least one update to the channel, or break the sync loop
 	// up into "per source" synchronizations
 
-	k, err = kubelet.NewMainKubelet(&kubeServer.KubeletConfiguration,
+	k, err = kubelet.NewMainKubelet(ctx, &kubeServer.KubeletConfiguration,
 		kubeDeps,
 		&kubeServer.ContainerRuntimeOptions,
 		hostname,
@@ -1295,7 +1296,7 @@ func createAndInitKubelet(kubeServer *options.KubeletServer,
 
 	k.BirthCry()
 
-	k.StartGarbageCollection()
+	k.StartGarbageCollection(ctx)
 
 	return k, nil
 }
