@@ -228,8 +228,6 @@ template:
             path: pathValue
             port: portValue
             scheme: schemeValue
-          sleep:
-            seconds: 1
           tcpSocket:
             host: hostValue
             port: portValue
@@ -245,8 +243,6 @@ template:
             path: pathValue
             port: portValue
             scheme: schemeValue
-          sleep:
-            seconds: 1
           tcpSocket:
             host: hostValue
             port: portValue
@@ -439,8 +435,6 @@ template:
             path: pathValue
             port: portValue
             scheme: schemeValue
-          sleep:
-            seconds: 1
           tcpSocket:
             host: hostValue
             port: portValue
@@ -456,8 +450,6 @@ template:
             path: pathValue
             port: portValue
             scheme: schemeValue
-          sleep:
-            seconds: 1
           tcpSocket:
             host: hostValue
             port: portValue
@@ -652,8 +644,6 @@ template:
             path: pathValue
             port: portValue
             scheme: schemeValue
-          sleep:
-            seconds: 1
           tcpSocket:
             host: hostValue
             port: portValue
@@ -669,8 +659,6 @@ template:
             path: pathValue
             port: portValue
             scheme: schemeValue
-          sleep:
-            seconds: 1
           tcpSocket:
             host: hostValue
             port: portValue

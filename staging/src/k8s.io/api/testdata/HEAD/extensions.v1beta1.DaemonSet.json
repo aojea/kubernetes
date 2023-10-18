@@ -690,9 +690,6 @@
                 "tcpSocket": {
                   "port": "portValue",
                   "host": "hostValue"
-                },
-                "sleep": {
-                  "seconds": 1
                 }
               },
               "preStop": {
@@ -716,9 +713,6 @@
                 "tcpSocket": {
                   "port": "portValue",
                   "host": "hostValue"
-                },
-                "sleep": {
-                  "seconds": 1
                 }
               }
             },
@@ -980,9 +974,6 @@
                 "tcpSocket": {
                   "port": "portValue",
                   "host": "hostValue"
-                },
-                "sleep": {
-                  "seconds": 1
                 }
               },
               "preStop": {
@@ -1006,9 +997,6 @@
                 "tcpSocket": {
                   "port": "portValue",
                   "host": "hostValue"
-                },
-                "sleep": {
-                  "seconds": 1
                 }
               }
             },
@@ -1270,9 +1258,6 @@
                 "tcpSocket": {
                   "port": "portValue",
                   "host": "hostValue"
-                },
-                "sleep": {
-                  "seconds": 1
                 }
               },
               "preStop": {
@@ -1296,9 +1281,6 @@
                 "tcpSocket": {
                   "port": "portValue",
                   "host": "hostValue"
-                },
-                "sleep": {
-                  "seconds": 1
                 }
               }
             },
