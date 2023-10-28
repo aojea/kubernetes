@@ -19,6 +19,7 @@ package servicecidrs
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -80,9 +81,9 @@ func newController(t *testing.T, cidrs []*networkingapiv1alpha1.ServiceCIDR, ips
 
 func TestControllerSync(t *testing.T) {
 	deletingServiceCIDR := makeServiceCIDR("deleting-cidr", "192.168.0.0/24", "2001:db2::/64")
-	now := metav1.Now()
+	deletedTime := metav1.NewTime(time.Now().Add(gracePeriod * time.Second))
 	deletingServiceCIDR.Finalizers = []string{ServiceCIDRProtectionFinalizer}
-	deletingServiceCIDR.DeletionTimestamp = &now
+	deletingServiceCIDR.DeletionTimestamp = &deletedTime
 
 	testCases := []struct {
 		name       string

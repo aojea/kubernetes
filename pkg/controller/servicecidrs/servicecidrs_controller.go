@@ -57,6 +57,10 @@ const (
 	controllerName = "service-cidr-controller"
 
 	ServiceCIDRProtectionFinalizer = "networking.k8s.io/service-cidr-finalizer"
+
+	// time in seconds to wait to remove a finalizer in a ServiceCIDR to ensure the allocators
+	// are no longer allocating from that range
+	gracePeriod = 30
 )
 
 // NewController returns a new *Controller.
@@ -358,21 +362,31 @@ func (c *Controller) sync(ctx context.Context, key string) error {
 		if err != nil {
 			return err
 		}
-		// if there are no IPAddress depending on this ServiceCIDR is safe to remove it
-		if ok {
-			return c.removeServiceCIDRFinalizerIfNeeded(ctx, cidr)
+		if !ok {
+			// update the status to indicate why the ServiceCIDR can not be deleted
+			svcApplyStatus := networkingapiv1alpha1apply.ServiceCIDRStatus().WithConditions(
+				metav1apply.Condition().
+					WithType(networkingapiv1alpha1.ServiceCIDRConditionReady).
+					WithStatus(metav1.ConditionFalse).
+					WithReason(networkingapiv1alpha1.ServiceCIDRReasonTerminating).
+					WithMessage("There are still IPAddresses referencing the ServiceCIDR, please remove them or create a new ServiceCIDR").
+					WithLastTransitionTime(metav1.Now()))
+			svcApply := networkingapiv1alpha1apply.ServiceCIDR(cidr.Name).WithStatus(svcApplyStatus)
+			_, err = c.client.NetworkingV1alpha1().ServiceCIDRs().ApplyStatus(ctx, svcApply, metav1.ApplyOptions{FieldManager: controllerName, Force: true})
+			return err
 		}
-		// update the status to indicate why the ServiceCIDR can not be deleted
-		svcApplyStatus := networkingapiv1alpha1apply.ServiceCIDRStatus().WithConditions(
-			metav1apply.Condition().
-				WithType(networkingapiv1alpha1.ServiceCIDRConditionReady).
-				WithStatus(metav1.ConditionFalse).
-				WithReason(networkingapiv1alpha1.ServiceCIDRReasonTerminating).
-				WithMessage("There are still IPAddresses referencing the ServiceCIDR, please remove them or create a new ServiceCIDR").
-				WithLastTransitionTime(metav1.Now()))
-		svcApply := networkingapiv1alpha1apply.ServiceCIDR(cidr.Name).WithStatus(svcApplyStatus)
-		_, err = c.client.NetworkingV1alpha1().ServiceCIDRs().ApplyStatus(ctx, svcApply, metav1.ApplyOptions{FieldManager: controllerName, Force: true})
-		return err
+		// if there are no IPAddress depending on this ServiceCIDR is safe to remove it
+		// however, there can be a race that the allocators still consider the ServiceCIDR
+		// ready and allocate a new IPAddress from them, to avoid that, we wait during a
+		// a grace period to be sure the deletion change has been propagated to the allocators
+		// and no new IPAddress is going to be allocated
+		timeSinceDeleted := time.Since(cidr.GetDeletionTimestamp().Time)
+		timeUntilDeleted := time.Duration(gracePeriod-timeSinceDeleted) * time.Second
+		if timeUntilDeleted > 0 {
+			c.queue.AddAfter(key, timeUntilDeleted)
+			return nil
+		}
+		return c.removeServiceCIDRFinalizerIfNeeded(ctx, cidr)
 	}
 
 	// Created or Updated, the ServiceCIDR must have a finalizer.
