@@ -665,16 +665,12 @@ type ServiceCIDR struct {
 	Status ServiceCIDRStatus
 }
 
-// ServiceCIDRSpec describe how the ServiceCIDR's specification looks like.
 type ServiceCIDRSpec struct {
-	// IPv4 defines an IPv4 IP block in CIDR notation (e.g. "192.168.0.0/24").
+	// CIDRs defines the IP blocks in CIDR notation (e.g. "192.168.0.0/24" or "2001:db8::/64")
+	// from which to assign service cluster IPs. Max of two CIDRs is allowed, one of each IP family.
 	// This field is immutable.
 	// +optional
-	IPv4 string
-	// IPv6 defines an IPv6 IP block in CIDR notation (e.g. "2001:db8::/64").
-	// This field is immutable.
-	// +optional
-	IPv6 string
+	CIDRs []string `json:"cidrs,omitempty" protobuf:"bytes,1,opt,name=cidrs"`
 }
 
 // ServiceCIDRStatus describes the current state of the ServiceCIDR.

@@ -107,14 +107,11 @@ type ServiceCIDR struct {
 
 // ServiceCIDRSpec define the CIDRs the user wants to use for allocating ClusterIPs for Services.
 type ServiceCIDRSpec struct {
-	// IPv4 defines an IPv4 IP block in CIDR notation (e.g. "192.168.0.0/24").
+	// CIDRs defines the IP blocks in CIDR notation (e.g. "192.168.0.0/24" or "2001:db8::/64")
+	// from which to assign service cluster IPs. Max of two CIDRs is allowed, one of each IP family.
 	// This field is immutable.
 	// +optional
-	IPv4 string `json:"ipv4,omitempty" protobuf:"bytes,1,opt,name=ipv4"`
-	// IPv6 defines an IPv6 IP block in CIDR notation (e.g. "2001:db8::/64").
-	// This field is immutable.
-	// +optional
-	IPv6 string `json:"ipv6,omitempty" protobuf:"bytes,2,opt,name=ipv6"`
+	CIDRs []string `json:"cidrs,omitempty" protobuf:"bytes,1,opt,name=cidrs"`
 }
 
 const (

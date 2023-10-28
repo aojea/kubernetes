@@ -2061,6 +2061,17 @@ func TestValidateServiceCIDR(t *testing.T) {
 				},
 			},
 		},
+		"three-ipranges": {
+			expectedErrors: 1,
+			ipRange: &networking.ServiceCIDR{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-name",
+				},
+				Spec: networking.ServiceCIDRSpec{
+					CIDRs: []string{"192.168.0.0/24", "fd00::/64", "10.0.0.0/16"},
+				},
+			},
+		},
 		"good-iprange-ipv4": {
 			expectedErrors: 0,
 			ipRange: &networking.ServiceCIDR{
@@ -2068,7 +2079,7 @@ func TestValidateServiceCIDR(t *testing.T) {
 					Name: "test-name",
 				},
 				Spec: networking.ServiceCIDRSpec{
-					IPv4: "192.168.0.0/24",
+					CIDRs: []string{"192.168.0.0/24"},
 				},
 			},
 		},
@@ -2079,7 +2090,7 @@ func TestValidateServiceCIDR(t *testing.T) {
 					Name: "test-name",
 				},
 				Spec: networking.ServiceCIDRSpec{
-					IPv6: "fd00:1234::/64",
+					CIDRs: []string{"fd00:1234::/64"},
 				},
 			},
 		},
@@ -2090,8 +2101,7 @@ func TestValidateServiceCIDR(t *testing.T) {
 					Name: "test-name",
 				},
 				Spec: networking.ServiceCIDRSpec{
-					IPv4: "192.168.0.0/24",
-					IPv6: "fd00:1234::/64",
+					CIDRs: []string{"192.168.0.0/24", "fd00:1234::/64"},
 				},
 			},
 		},
@@ -2102,7 +2112,7 @@ func TestValidateServiceCIDR(t *testing.T) {
 					Name: "test-name",
 				},
 				Spec: networking.ServiceCIDRSpec{
-					IPv4: "sadasdsad",
+					CIDRs: []string{"asdasdasd"},
 				},
 			},
 		},
@@ -2113,7 +2123,7 @@ func TestValidateServiceCIDR(t *testing.T) {
 					Name: "test-name",
 				},
 				Spec: networking.ServiceCIDRSpec{
-					IPv4: "192.168.0.1",
+					CIDRs: []string{"192.168.0.1"},
 				},
 			},
 		},
@@ -2124,7 +2134,7 @@ func TestValidateServiceCIDR(t *testing.T) {
 					Name: "test-name",
 				},
 				Spec: networking.ServiceCIDRSpec{
-					IPv4: "192.168.0.1/24",
+					CIDRs: []string{"192.168.0.1/24"},
 				},
 			},
 		},
@@ -2135,7 +2145,7 @@ func TestValidateServiceCIDR(t *testing.T) {
 					Name: "test-name",
 				},
 				Spec: networking.ServiceCIDRSpec{
-					IPv6: "fd00:1234::2/64",
+					CIDRs: []string{"fd00:1234::2/64"},
 				},
 			},
 		},
@@ -2146,7 +2156,7 @@ func TestValidateServiceCIDR(t *testing.T) {
 					Name: "test-name",
 				},
 				Spec: networking.ServiceCIDRSpec{
-					IPv6: "FD00:1234::2/64",
+					CIDRs: []string{"FD00:1234::2/64"},
 				},
 			},
 		},
@@ -2157,8 +2167,7 @@ func TestValidateServiceCIDR(t *testing.T) {
 					Name: "test-name",
 				},
 				Spec: networking.ServiceCIDRSpec{
-					IPv4: "192.168.0.0/24",
-					IPv6: "FD00:1234::/64",
+					CIDRs: []string{"192.168.0.0/24", "FD00:1234::/64"},
 				},
 			},
 		},
@@ -2169,8 +2178,7 @@ func TestValidateServiceCIDR(t *testing.T) {
 					Name: "test-name",
 				},
 				Spec: networking.ServiceCIDRSpec{
-					IPv4: "192.168.007.0/24",
-					IPv6: "fd00:1234::/64",
+					CIDRs: []string{"192.168.007.0/24", "fd00:1234::/64"},
 				},
 			},
 		},
