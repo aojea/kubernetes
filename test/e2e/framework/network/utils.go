@@ -326,6 +326,9 @@ func (config *NetworkingTestConfig) DialFromContainer(ctx context.Context, proto
 			trimmed := strings.TrimSpace(response)
 			if trimmed != "" {
 				responses.Insert(trimmed)
+				if !expectedResponses.Has(trimmed) {
+					return fmt.Errorf("unexpected response %s ... \nTries %d\nCommand %v\nretrieved %v\nexpected %v", trimmed, maxTries, cmd, responses, expectedResponses)
+				}
 			}
 		}
 		framework.Logf("Waiting for responses: %v", expectedResponses.Difference(responses))
