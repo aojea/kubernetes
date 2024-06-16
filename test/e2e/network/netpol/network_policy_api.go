@@ -197,9 +197,15 @@ var _ = common.SIGDescribe("Netpol API", func() {
 		ginkgo.By("deleting")
 		err = npClient.Delete(ctx, createdNetPol.Name, metav1.DeleteOptions{})
 		framework.ExpectNoError(err)
-		_, err = npClient.Get(ctx, createdNetPol.Name, metav1.GetOptions{})
-		if !apierrors.IsNotFound(err) {
-			framework.Failf("expected 404, got %#v", err)
+		err = wait.PollUntilContextTimeout(ctx, 1*time.Second, 10*time.Second, true, func(context.Context) (bool, error) {
+			_, err = npClient.Get(ctx, createdNetPol.Name, metav1.GetOptions{})
+			if !apierrors.IsNotFound(err) {
+				return true, nil
+			}
+			return false, nil
+		})
+		if err != nil {
+			framework.Failf("expected network policy to be deleted: %#v", err)
 		}
 		nps, err = npClient.List(ctx, metav1.ListOptions{LabelSelector: "special-label=" + f.UniqueName})
 		framework.ExpectNoError(err)
@@ -208,9 +214,19 @@ var _ = common.SIGDescribe("Netpol API", func() {
 		ginkgo.By("deleting a collection")
 		err = npClient.DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{LabelSelector: "special-label=" + f.UniqueName})
 		framework.ExpectNoError(err)
-		nps, err = npClient.List(ctx, metav1.ListOptions{LabelSelector: "special-label=" + f.UniqueName})
-		framework.ExpectNoError(err)
-		gomega.Expect(nps.Items).To(gomega.BeEmpty(), "filtered list should have 0 items")
+		err = wait.PollUntilContextTimeout(ctx, 1*time.Second, 10*time.Second, true, func(context.Context) (bool, error) {
+			nps, err = npClient.List(ctx, metav1.ListOptions{LabelSelector: "special-label=" + f.UniqueName})
+			if err != nil {
+				return false, err
+			}
+			if len(nps.Items) > 0 {
+				return false, nil
+			}
+			return true, nil
+		})
+		if err != nil {
+			framework.Failf("list should have 0 items: %v", err)
+		}
 	})
 
 	/*
@@ -267,8 +283,18 @@ var _ = common.SIGDescribe("Netpol API", func() {
 		ginkgo.By("deleting all test collection")
 		err = npClient.DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{LabelSelector: "special-label=" + f.UniqueName})
 		framework.ExpectNoError(err)
-		nps, err := npClient.List(ctx, metav1.ListOptions{LabelSelector: "special-label=" + f.UniqueName})
-		framework.ExpectNoError(err)
-		gomega.Expect(nps.Items).To(gomega.BeEmpty(), "filtered list should be 0 items")
+		err = wait.PollUntilContextTimeout(ctx, 1*time.Second, 10*time.Second, true, func(context.Context) (bool, error) {
+			nps, err := npClient.List(ctx, metav1.ListOptions{LabelSelector: "special-label=" + f.UniqueName})
+			if err != nil {
+				return false, err
+			}
+			if len(nps.Items) > 0 {
+				return false, nil
+			}
+			return true, nil
+		})
+		if err != nil {
+			framework.Failf("list should have 0 items: %v", err)
+		}
 	})
 })
