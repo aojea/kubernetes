@@ -50,7 +50,6 @@ import (
 	"k8s.io/kubernetes/pkg/proxy/metrics"
 	proxyutil "k8s.io/kubernetes/pkg/proxy/util"
 	"k8s.io/kubernetes/pkg/util/async"
-	utilexec "k8s.io/utils/exec"
 	netutils "k8s.io/utils/net"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/knftables"
@@ -250,7 +249,7 @@ func NewProxier(ctx context.Context,
 		nftables:            nft,
 		masqueradeAll:       masqueradeAll,
 		masqueradeMark:      masqueradeMark,
-		conntrack:           conntrack.NewExec(utilexec.New()),
+		conntrack:           conntrack.NewConntracker(),
 		localDetector:       localDetector,
 		hostname:            hostname,
 		nodeIP:              nodeIP,
