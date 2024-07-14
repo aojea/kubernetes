@@ -264,8 +264,27 @@ func (config *NetworkingTestConfig) diagnoseMissingEndpoints(foundEndpoints sets
 func (config *NetworkingTestConfig) EndpointHostnames() sets.String {
 	expectedEps := sets.NewString()
 	for _, p := range config.EndpointPods {
+
 		if config.EndpointsHostNetwork {
-			expectedEps.Insert(p.Spec.NodeSelector["kubernetes.io/hostname"])
+			// The hostname reported by the OS on host network Pods will not match the node name
+			// when using the --hostname-override flag in the kubelet.
+			// It seems that the node.status.addresses for type hostname returns the OS value,
+			// so we will use that value if exist, otherwise use the node name.
+			// we use the value of the node name.
+			// xref: https://issues.k8s.io/126087
+			hostname := p.Spec.NodeSelector["kubernetes.io/hostname"]
+			for _, n := range config.Nodes {
+				if n.Name == p.Spec.NodeSelector["kubernetes.io/hostname"] {
+					for _, address := range n.Status.Addresses {
+						if address.Type == v1.NodeHostName {
+							hostname = address.Address
+							break
+						}
+					}
+					break
+				}
+			}
+			expectedEps.Insert(hostname)
 		} else {
 			expectedEps.Insert(p.Name)
 		}
