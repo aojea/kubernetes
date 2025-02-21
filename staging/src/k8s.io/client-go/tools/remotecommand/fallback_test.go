@@ -202,7 +202,7 @@ func TestFallbackClient_PrimaryAndSecondaryFail(t *testing.T) {
 	websocketExec, ok := fallbackExec.primary.(*wsStreamExecutor)
 	assert.True(t, ok, "error casting executor as websocket executor")
 	// Set the attempted subprotocol version to V4; websocket server only accepts V5.
-	websocketExec.protocols = []string{remotecommand.StreamProtocolV4Name}
+	websocketExec.wsDialer.Subprotocols = []string{remotecommand.StreamProtocolV4Name}
 
 	// Generate random data, and set it up to stream on STDIN. The data will be
 	// returned on the STDOUT buffer.

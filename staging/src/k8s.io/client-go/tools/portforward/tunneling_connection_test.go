@@ -17,6 +17,7 @@ limitations under the License.
 package portforward
 
 import (
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -35,7 +36,6 @@ import (
 	constants "k8s.io/apimachinery/pkg/util/portforward"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/transport/websocket"
 )
 
 func TestTunnelingConnection_ReadWriteClose(t *testing.T) {
@@ -51,23 +51,35 @@ func TestTunnelingConnection_ReadWriteClose(t *testing.T) {
 			Subprotocols: []string{constants.WebsocketsSPDYTunnelingPortForwardV1},
 		}
 		conn, err := upgrader.Upgrade(w, req, nil)
-		require.NoError(t, err)
+		if err != nil {
+			t.Errorf("unexpected error %v", err)
+		}
 		defer conn.Close() //nolint:errcheck
-		require.Equal(t, constants.WebsocketsSPDYTunnelingPortForwardV1, conn.Subprotocol())
+		if constants.WebsocketsSPDYTunnelingPortForwardV1 != conn.Subprotocol() {
+			t.Errorf("expected %s got %s", constants.WebsocketsSPDYTunnelingPortForwardV1, conn.Subprotocol())
+		}
 		tunnelingConn := NewTunnelingConnection("server", conn)
 		spdyConn, err := spdy.NewServerConnection(tunnelingConn, justQueueStream(streamChan))
-		require.NoError(t, err)
+		if err != nil {
+			t.Errorf("unexpected error %v", err)
+		}
 		defer spdyConn.Close() //nolint:errcheck
 		<-stopServerChan
 	}))
 	defer tunnelingServer.Close()
 	// Dial the client tunneling connection to the tunneling server.
 	url, err := url.Parse(tunnelingServer.URL)
-	require.NoError(t, err)
+	if err != nil {
+		t.Errorf("unexpected error %v", err)
+	}
 	dialer, err := NewSPDYOverWebsocketDialer(url, &rest.Config{Host: url.Host})
-	require.NoError(t, err)
+	if err != nil {
+		t.Errorf("unexpected error %v", err)
+	}
 	spdyClient, protocol, err := dialer.Dial(constants.PortForwardV1Name)
-	require.NoError(t, err)
+	if err != nil {
+		t.Errorf("unexpected error %v", err)
+	}
 	assert.Equal(t, constants.PortForwardV1Name, protocol)
 	defer spdyClient.Close() //nolint:errcheck
 	// Create a SPDY client stream, which will queue a SPDY server stream
@@ -77,15 +89,22 @@ func TestTunnelingConnection_ReadWriteClose(t *testing.T) {
 	var actual []byte
 	go func() {
 		clientStream, err := spdyClient.CreateStream(http.Header{})
-		require.NoError(t, err)
+		if err != nil {
+			t.Errorf("unexpected error %v", err)
+			return
+		}
 		_, err = io.Copy(clientStream, strings.NewReader(expected))
-		require.NoError(t, err)
+		if err != nil {
+			t.Errorf("unexpected error %v", err)
+		}
 		clientStream.Close() //nolint:errcheck
 	}()
 	select {
 	case serverStream := <-streamChan:
 		actual, err = io.ReadAll(serverStream)
-		require.NoError(t, err)
+		if err != nil {
+			t.Errorf("unexpected error %v", err)
+		}
 		defer serverStream.Close() //nolint:errcheck
 	case <-time.After(wait.ForeverTestTimeout):
 		t.Fatalf("timeout waiting for spdy stream to arrive on channel.")
@@ -102,7 +121,9 @@ func TestTunnelingConnection_LocalRemoteAddress(t *testing.T) {
 			Subprotocols: []string{constants.WebsocketsSPDYTunnelingPortForwardV1},
 		}
 		conn, err := upgrader.Upgrade(w, req, nil)
-		require.NoError(t, err)
+		if err != nil {
+			t.Errorf("unexpected error %v", err)
+		}
 		defer conn.Close() //nolint:errcheck
 		require.Equal(t, constants.WebsocketsSPDYTunnelingPortForwardV1, conn.Subprotocol())
 		<-stopServerChan
@@ -165,21 +186,32 @@ func TestTunnelingConnection_ReadWriteDeadlines(t *testing.T) {
 // a websocket connection. Returns the TunnelingConnection injected with the
 // websocket connection or an error if one occurs.
 func dialForTunnelingConnection(url *url.URL) (*TunnelingConnection, error) {
+	dialer := gwebsocket.Dialer{
+		ReadBufferSize:  dataBufferSize + 1024, // add space for the protocol byte indicating which channel the data is for
+		WriteBufferSize: dataBufferSize + 1024, // add space for the protocol byte indicating which channel the data is for
+	}
+
+	// There is no passed context, so skip the context when creating request for now.
+	// Websockets requires "GET" method: RFC 6455 Sec. 4.1 (page 17).
 	req, err := http.NewRequest("GET", url.String(), nil)
 	if err != nil {
 		return nil, err
 	}
+	switch req.URL.Scheme {
+	case "https":
+		req.URL.Scheme = "wss"
+	case "http":
+		req.URL.Scheme = "ws"
+	default:
+		return nil, fmt.Errorf("unknown url scheme: %s", req.URL.Scheme)
+	}
 	// Tunneling must initiate a websocket upgrade connection, using tunneling portforward protocol.
-	tunnelingProtocols := []string{constants.WebsocketsSPDYTunnelingPortForwardV1}
-	transport, holder, err := websocket.RoundTripperFor(&rest.Config{Host: url.Host})
+	dialer.Subprotocols = []string{constants.WebsocketsSPDYTunnelingPortForwardV1}
+	wsConn, _, err := dialer.DialContext(req.Context(), req.URL.String(), req.Header)
 	if err != nil {
 		return nil, err
 	}
-	conn, err := websocket.Negotiate(transport, holder, req, tunnelingProtocols...)
-	if err != nil {
-		return nil, err
-	}
-	return NewTunnelingConnection("client", conn), nil
+	return NewTunnelingConnection("client", wsConn), nil
 }
 
 func justQueueStream(streams chan httpstream.Stream) func(httpstream.Stream, <-chan struct{}) error {

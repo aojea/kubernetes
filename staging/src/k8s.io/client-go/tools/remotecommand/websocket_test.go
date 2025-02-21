@@ -737,7 +737,7 @@ func TestWebSocketClient_ProtocolVersions(t *testing.T) {
 	}
 	for _, requestedVersion := range versions {
 		streamExec := exec.(*wsStreamExecutor)
-		streamExec.protocols = []string{requestedVersion}
+		streamExec.wsDialer.Subprotocols = []string{requestedVersion}
 		var stdout bytes.Buffer
 		options := &StreamOptions{
 			Stdout: &stdout,
@@ -789,7 +789,7 @@ func TestWebSocketClient_BadHandshake(t *testing.T) {
 	}
 	streamExec := exec.(*wsStreamExecutor)
 	// Set the attempted subprotocol version to V4; websocket server only accepts V5.
-	streamExec.protocols = []string{remotecommand.StreamProtocolV4Name}
+	streamExec.wsDialer.Subprotocols = []string{remotecommand.StreamProtocolV4Name}
 
 	var stdout bytes.Buffer
 	options := &StreamOptions{

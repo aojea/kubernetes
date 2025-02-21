@@ -23,22 +23,35 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	gwebsocket "github.com/gorilla/websocket"
 
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/util/httpstream"
+	utilnet "k8s.io/apimachinery/pkg/util/net"
 	"k8s.io/apimachinery/pkg/util/remotecommand"
 	restclient "k8s.io/client-go/rest"
-	"k8s.io/client-go/transport/websocket"
+	"k8s.io/client-go/transport"
 	"k8s.io/klog/v2"
 )
 
-// writeDeadline defines the time that a client-side write to the websocket
-// connection must complete before an i/o timeout occurs.
-const writeDeadline = 60 * time.Second
+var (
+	statusScheme = runtime.NewScheme()
+	statusCodecs = serializer.NewCodecFactory(statusScheme)
+)
+
+func init() {
+	statusScheme.AddUnversionedTypes(metav1.SchemeGroupVersion,
+		&metav1.Status{},
+	)
+}
 
 var (
 	_ Executor          = &wsStreamExecutor{}
@@ -63,16 +76,18 @@ const (
 	// this deadline in terms of the ping period, we are essentially saying
 	// we can drop "X" (e.g. 12) pings before firing the timeout.
 	pingReadDeadline = (pingPeriod * 12) + (1 * time.Second)
+	// writeDeadline defines the time that a client-side write to the websocket
+	// connection must complete before an i/o timeout occurs.
+	writeDeadline = 60 * time.Second
+	// size of buffers for the websocket connection.
+	dataBufferSize = 32 * 1024
 )
 
 // wsStreamExecutor handles transporting standard shell streams over an httpstream connection.
 type wsStreamExecutor struct {
-	transport http.RoundTripper
-	upgrader  websocket.ConnectionHolder
-	method    string
-	url       string
-	// requested protocols in priority order (e.g. v5.channel.k8s.io before v4.channel.k8s.io).
-	protocols []string
+	wsDialer gwebsocket.Dialer
+	method   string
+	url      string
 	// selected protocol from the handshake process; could be empty string if handshake fails.
 	negotiated string
 	// period defines how often a "ping" heartbeat message is sent to the other endpoint.
@@ -91,16 +106,31 @@ func NewWebSocketExecutor(config *restclient.Config, method, url string) (Execut
 
 // NewWebSocketExecutorForProtocols allows to execute commands via a WebSocket connection.
 func NewWebSocketExecutorForProtocols(config *restclient.Config, method, url string, protocols ...string) (Executor, error) {
-	transport, upgrader, err := websocket.RoundTripperFor(config)
+	transportCfg, err := config.TransportConfig()
 	if err != nil {
 		return nil, fmt.Errorf("error creating websocket transports: %v", err)
 	}
+	tlsConfig, err := transport.TLSConfigFor(transportCfg)
+	if err != nil {
+		return nil, fmt.Errorf("error creating websocket transports: %v", err)
+	}
+	proxy := config.Proxy
+	if proxy == nil {
+		proxy = utilnet.NewProxierWithNoProxyCIDR(http.ProxyFromEnvironment)
+	}
+
+	dialer := gwebsocket.Dialer{
+		Proxy:           proxy,
+		TLSClientConfig: tlsConfig,
+		Subprotocols:    protocols,
+		ReadBufferSize:  dataBufferSize + 1024, // add space for the protocol byte indicating which channel the data is for
+		WriteBufferSize: dataBufferSize + 1024, // add space for the protocol byte indicating which channel the data is for
+	}
+
 	return &wsStreamExecutor{
-		transport:         transport,
-		upgrader:          upgrader,
+		wsDialer:          dialer,
 		method:            method,
 		url:               url,
-		protocols:         protocols,
 		heartbeatPeriod:   pingPeriod,
 		heartbeatDeadline: pingReadDeadline,
 	}, nil
@@ -117,19 +147,71 @@ func (e *wsStreamExecutor) Stream(options StreamOptions) error {
 // defines which streams are requested. Returns an error if one occurred. This method is NOT
 // safe to run concurrently with the same executor (because of the state stored in the upgrader).
 func (e *wsStreamExecutor) StreamWithContext(ctx context.Context, options StreamOptions) error {
-	req, err := http.NewRequestWithContext(ctx, e.method, e.url, nil)
+	request, err := http.NewRequestWithContext(ctx, e.method, e.url, nil)
 	if err != nil {
 		return err
 	}
-	conn, err := websocket.Negotiate(e.transport, e.upgrader, req, e.protocols...)
+
+	switch request.URL.Scheme {
+	case "https":
+		request.URL.Scheme = "wss"
+	case "http":
+		request.URL.Scheme = "ws"
+	default:
+		return fmt.Errorf("unknown url scheme: %s", request.URL.Scheme)
+	}
+
+	wsConn, resp, err := e.wsDialer.DialContext(request.Context(), request.URL.String(), request.Header)
 	if err != nil {
+		// BadHandshake error becomes an "UpgradeFailureError" (used for streaming fallback).
+		if errors.Is(err, gwebsocket.ErrBadHandshake) {
+			cause := err
+			// Enhance the error message with the error response if possible.
+			if resp != nil && len(resp.Status) > 0 {
+				defer resp.Body.Close()                         //nolint:errcheck
+				cause = fmt.Errorf("%w (%s)", err, resp.Status) // Always add the response status
+				responseError := ""
+				responseErrorBytes, readErr := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+				if readErr != nil {
+					cause = fmt.Errorf("%w: unable to read error from server response", cause)
+				} else {
+					// If returned error can be decoded as "metav1.Status", return a "StatusError".
+					responseError = strings.TrimSpace(string(responseErrorBytes))
+					if len(responseError) > 0 {
+						if obj, _, decodeErr := statusCodecs.UniversalDecoder().Decode(responseErrorBytes, nil, &metav1.Status{}); decodeErr == nil {
+							if status, ok := obj.(*metav1.Status); ok {
+								cause = &apierrors.StatusError{ErrStatus: *status}
+							}
+						} else {
+							// Otherwise, append the responseError string.
+							cause = fmt.Errorf("%w: %s", cause, responseError)
+						}
+					}
+				}
+			}
+			return &httpstream.UpgradeFailureError{Cause: cause}
+		}
 		return err
 	}
-	if conn == nil {
+
+	// Ensure we got back a protocol we understand
+	foundProtocol := false
+	for _, protocolVersion := range e.wsDialer.Subprotocols {
+		if protocolVersion == wsConn.Subprotocol() {
+			foundProtocol = true
+			break
+		}
+	}
+	if !foundProtocol {
+		wsConn.Close() // nolint:errcheck
+		return &httpstream.UpgradeFailureError{Cause: fmt.Errorf("invalid protocol, expected one of %q, got %q", e.wsDialer.Subprotocols, wsConn.Subprotocol())}
+	}
+
+	if wsConn == nil {
 		panic(fmt.Errorf("websocket connection is nil"))
 	}
-	defer conn.Close()
-	e.negotiated = conn.Subprotocol()
+	defer wsConn.Close()
+	e.negotiated = wsConn.Subprotocol()
 	klog.V(4).Infof("The subprotocol is %s", e.negotiated)
 
 	var streamer streamProtocolHandler
@@ -157,9 +239,9 @@ func (e *wsStreamExecutor) StreamWithContext(ctx context.Context, options Stream
 				panicChan <- p
 			}
 		}()
-		creator := newWSStreamCreator(conn)
+		creator := newWSStreamCreator(wsConn)
 		go creator.readDemuxLoop(
-			e.upgrader.DataBufferSize(),
+			dataBufferSize,
 			e.heartbeatPeriod,
 			e.heartbeatDeadline,
 		)
