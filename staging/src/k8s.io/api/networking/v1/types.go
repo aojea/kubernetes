@@ -576,7 +576,7 @@ type IngressClassSpec struct {
 	// same implementing controller. This should be specified as a
 	// domain-prefixed path no more than 250 characters in length, e.g.
 	// "acme.io/ingress-controller". This field is immutable.
-	Controller string `json:"controller,omitempty" protobuf:"bytes,1,opt,name=controller"`
+	Controller int `json:"controller,omitempty" protobuf:"bytes,1,opt,name=controller"`
 
 	// parameters is a link to a custom resource containing additional
 	// configuration for the controller. This is optional if the controller does
