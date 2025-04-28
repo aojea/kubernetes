@@ -50,7 +50,7 @@ import (
 	"k8s.io/kubernetes/pkg/proxy/metaproxier"
 	"k8s.io/kubernetes/pkg/proxy/metrics"
 	proxyutil "k8s.io/kubernetes/pkg/proxy/util"
-	"k8s.io/kubernetes/pkg/util/async"
+	"k8s.io/kubernetes/pkg/proxy/runner"
 	utiliptables "k8s.io/kubernetes/pkg/util/iptables"
 	utilkernel "k8s.io/kubernetes/pkg/util/kernel"
 	netutils "k8s.io/utils/net"
@@ -187,7 +187,7 @@ type Proxier struct {
 	endpointSlicesSynced bool
 	servicesSynced       bool
 	initialized          int32
-	syncRunner           *async.BoundedFrequencyRunner // governs calls to syncProxyRules
+	syncRunner           *runner.BoundedFrequencyRunner // governs calls to syncProxyRules
 
 	// These are effectively const and do not need the mutex to be held.
 	syncPeriod    time.Duration
@@ -402,7 +402,7 @@ func NewProxier(
 	}
 	burstSyncs := 2
 	logger.V(2).Info("ipvs sync params", "minSyncPeriod", minSyncPeriod, "syncPeriod", syncPeriod, "burstSyncs", burstSyncs)
-	proxier.syncRunner = async.NewBoundedFrequencyRunner("sync-runner", proxier.syncProxyRules, minSyncPeriod, syncPeriod, burstSyncs)
+	proxier.syncRunner = runner.NewBoundedFrequencyRunner("sync-runner", proxier.syncProxyRules, minSyncPeriod, syncPeriod, burstSyncs)
 	proxier.gracefuldeleteManager.Run()
 	return proxier, nil
 }
