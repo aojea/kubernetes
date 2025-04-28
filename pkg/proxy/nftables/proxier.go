@@ -273,10 +273,9 @@ func NewProxier(ctx context.Context,
 		serviceNodePorts:    newNFTElementStorage("map", serviceNodePortsMap),
 	}
 
-	burstSyncs := 2
-	logger.V(2).Info("NFTables sync params", "minSyncPeriod", minSyncPeriod, "syncPeriod", syncPeriod, "burstSyncs", burstSyncs)
+	logger.V(2).Info("NFTables sync params", "minSyncPeriod", minSyncPeriod, "syncPeriod", syncPeriod, "maxSyncPeriod", proxyutil.FullSyncPeriod )
 	// We need to pass *some* maxInterval to NewBoundedFrequencyRunner. time.Hour is arbitrary.
-	proxier.syncRunner = runner.NewBoundedFrequencyRunner("sync-runner", proxier.syncProxyRules, minSyncPeriod, proxyutil.FullSyncPeriod, burstSyncs)
+	proxier.syncRunner = runner.NewBoundedFrequencyRunner("sync-runner", proxier.syncProxyRules, minSyncPeriod, syncPeriod, proxyutil.FullSyncPeriod)
 
 	return proxier, nil
 }
@@ -1202,7 +1201,7 @@ func (proxier *Proxier) syncProxyRules() {
 	defer func() {
 		if !success {
 			proxier.logger.Info("Sync failed", "retryingTime", proxier.syncPeriod)
-			proxier.syncRunner.RetryAfter(proxier.syncPeriod)
+			proxier.syncRunner.Retry()
 			// proxier.serviceChanges and proxier.endpointChanges have already
 			// been flushed, so we've lost the state needed to be able to do
 			// a partial sync.
