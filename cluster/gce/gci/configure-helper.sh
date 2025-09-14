@@ -3000,6 +3000,9 @@ EOF
   if [[ "${NETWORK_POLICY_PROVIDER:-}" == "kube-network-policies" ]]; then
     setup-addon-manifests "addons" "kube-network-policies"
   fi
+  if [[ "${NETWORK_POLICY_PROVIDER:-}" == "kube-network-policies-iptracker" ]]; then
+    setup-addon-manifests "addons" "kube-network-policies-iptracker"
+  fi
   if [[ "${ENABLE_DEFAULT_STORAGE_CLASS:-}" == "true" ]]; then
     setup-addon-manifests "addons" "storage-class/gce"
   fi
