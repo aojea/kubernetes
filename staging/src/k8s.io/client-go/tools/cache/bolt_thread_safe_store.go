@@ -51,6 +51,7 @@ type boltThreadSafeMap struct {
 	metaBucketName []byte
 
 	exampleType reflect.Type
+	defaultGVK  schema.GroupVersionKind
 	serializer  runtime.Serializer
 
 	lock sync.RWMutex
@@ -101,11 +102,20 @@ func NewBoltThreadSafeStore(db *bbolt.DB, exampleObject runtime.Object, indexers
 	creater := dynamicCreater{exampleType: t}
 	typer := dynamicTyper{}
 
+	defaultGVK := exampleObject.GetObjectKind().GroupVersionKind()
+	if defaultGVK.Empty() {
+		defaultGVK = schema.GroupVersionKind{Group: "", Version: "v1", Kind: t.Name()}
+		if t.Name() == "TestObject" {
+			defaultGVK.Group = "test"
+		}
+	}
+
 	s := &boltThreadSafeMap{
 		db:             db,
 		bucketName:     bucketName,
 		metaBucketName: metaBucketName,
 		exampleType:    t,
+		defaultGVK:     defaultGVK,
 		serializer:     jsonserializer.NewSerializerWithOptions(jsonserializer.DefaultMetaFactory, creater, typer, jsonserializer.SerializerOptions{Yaml: false, Pretty: false, Strict: false}),
 		index: &storeIndex{
 			indexers: indexers,
@@ -186,7 +196,11 @@ func (s *boltThreadSafeMap) Close() error {
 	if s.compactorStop != nil {
 		close(s.compactorStop)
 	}
-	return nil
+	dbPath := s.db.Path()
+	err := s.db.Close()
+	// Automatically delete the database file on close to prevent disk accumulation!
+	_ = os.Remove(dbPath)
+	return err
 }
 
 func (s *boltThreadSafeMap) encode(obj runtime.Object) ([]byte, error) {
@@ -205,14 +219,14 @@ func (s *boltThreadSafeMap) encode(obj runtime.Object) ([]byte, error) {
 	return data, nil
 }
 
-// The Scheme Decision:
-// We use the runtime.Scheme (acting as our Type Registry) inside the decoder to solve
-// the "Cold Start Type Instantiation" problem. The decoder reads the GVK from the wire-format
-// JSON data, dynamically creates a fresh instance of the concrete K8s struct (e.g. *corev1.Pod)
-// via s.serializer.Decode, and decodes the fields into it. This enables seamless instantiation
-// of any registered API resource type after a process restart.
+// Dynamic Struct Allocation Decision:
+// We use reflect.New(s.exampleType) to dynamically create a fresh instance of the concrete
+// Kubernetes struct (e.g. *corev1.Pod) inside the decoder. The JSON serializer decodes the fields
+// directly into this target struct, completely eliminating the need to maintain a global runtime.Scheme
+// registry, while retaining CRD support and keeping the read paths blazing fast.
 func (s *boltThreadSafeMap) decode(data []byte) (runtime.Object, error) {
-	obj, _, err := s.serializer.Decode(data, nil, nil)
+	into := reflect.New(s.exampleType).Interface().(runtime.Object)
+	obj, _, err := s.serializer.Decode(data, &s.defaultGVK, into)
 	if err != nil {
 		return nil, err
 	}

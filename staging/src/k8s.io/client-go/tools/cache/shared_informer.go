@@ -339,7 +339,7 @@ func NewSharedIndexInformerWithOptions(lw ListerWatcher, exampleObject runtime.O
 		if err := os.MkdirAll(dbDir, 0755); err != nil {
 			panic(fmt.Errorf("failed to create database directory %q: %v", dbDir, err))
 		}
-		dbName := fmt.Sprintf("informer-%s.db", strings.ToLower(t.Name()))
+		dbName := fmt.Sprintf("informer-%s-%d.db", strings.ToLower(t.Name()), time.Now().UnixNano())
 		dbPath := filepath.Join(dbDir, dbName)
 
 		// Pass exampleObject directly. Let the BoltDB store construct its own dummy Scheme internally!
