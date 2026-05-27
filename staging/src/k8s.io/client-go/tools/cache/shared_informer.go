@@ -20,6 +20,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -322,8 +324,40 @@ func NewSharedIndexInformerWithOptions(lw ListerWatcher, exampleObject runtime.O
 	processor := &sharedProcessor{clock: realClock}
 	processor.listenersRCond = sync.NewCond(processor.listenersLock.RLocker())
 
+	var indexer Indexer
+	if options.PersistentStorage {
+		var err error
+
+		// 1. Safely extract the type name for the database file (Guard against reflect panic)
+		t := reflect.TypeOf(exampleObject)
+		if t.Kind() == reflect.Ptr {
+			t = t.Elem()
+		}
+
+		// 2. Resolve database path dynamically and ensure the parent directory exists!
+		dbDir := filepath.Join(os.TempDir(), "kubernetes", "client-go", "cache")
+		if err := os.MkdirAll(dbDir, 0755); err != nil {
+			panic(fmt.Errorf("failed to create database directory %q: %v", dbDir, err))
+		}
+		dbName := fmt.Sprintf("informer-%s.db", strings.ToLower(t.Name()))
+		dbPath := filepath.Join(dbDir, dbName)
+
+		// Pass exampleObject directly. Let the BoltDB store construct its own dummy Scheme internally!
+		indexer, err = NewBoltDBIndexer(
+			dbPath,
+			exampleObject,
+			DeletionHandlingMetaNamespaceKeyFunc,
+			options.Indexers,
+		)
+		if err != nil {
+			panic(fmt.Sprintf("failed to initialize BoltDB store: %v", err))
+		}
+	} else {
+		indexer = NewIndexer(DeletionHandlingMetaNamespaceKeyFunc, options.Indexers, WithStoreMetrics(options.Identifier, options.InformerMetricsProvider))
+	}
+
 	return &sharedIndexInformer{
-		indexer:                         NewIndexer(DeletionHandlingMetaNamespaceKeyFunc, options.Indexers, WithStoreMetrics(options.Identifier, options.InformerMetricsProvider)),
+		indexer:                         indexer,
 		processor:                       processor,
 		synced:                          make(chan struct{}),
 		listerWatcher:                   lw,
@@ -359,6 +393,10 @@ type SharedIndexInformerOptions struct {
 	// InformerMetricsProvider is the metrics provider for the FIFO queue.
 	// If not set, metrics will be no-ops.
 	InformerMetricsProvider InformerMetricsProvider
+
+	// PersistentStorage enables high-performance L1+L2 on-disk caching instead of pure in-memory storage.
+	// Database will be automatically named and created under a local well-known path.
+	PersistentStorage bool
 }
 
 // InformerSynced is a function that can be used to determine if an informer has synced.  This is useful for determining if caches have synced.
@@ -719,6 +757,14 @@ func (s *sharedIndexInformer) Run(stopCh <-chan struct{}) {
 func (s *sharedIndexInformer) RunWithContext(ctx context.Context) {
 	defer utilruntime.HandleCrashWithContext(ctx)
 	logger := klog.FromContext(ctx)
+
+	if closeable, ok := s.indexer.(interface{ Close() error }); ok {
+		defer func() {
+			if err := closeable.Close(); err != nil {
+				logger.Error(err, "Failed to close informer indexer storage")
+			}
+		}()
+	}
 
 	if s.HasStarted() {
 		logger.Info("Warning: the sharedIndexInformer has started, run more than once is not allowed")

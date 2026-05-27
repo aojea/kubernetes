@@ -28,12 +28,12 @@ import (
 )
 
 // NewBoltDBStore creates a Store backed by BoltDB.
-func NewBoltDBStore(path string, scheme *runtime.Scheme, keyFunc KeyFunc) (Store, error) {
-	return NewBoltDBIndexer(path, scheme, keyFunc, Indexers{})
+func NewBoltDBStore(path string, exampleObject runtime.Object, keyFunc KeyFunc) (Store, error) {
+	return NewBoltDBIndexer(path, exampleObject, keyFunc, Indexers{})
 }
 
 // NewBoltDBIndexer creates an Indexer backed by BoltDB.
-func NewBoltDBIndexer(path string, scheme *runtime.Scheme, keyFunc KeyFunc, indexers Indexers) (Indexer, error) {
+func NewBoltDBIndexer(path string, exampleObject runtime.Object, keyFunc KeyFunc, indexers Indexers) (Indexer, error) {
 	// Ensure directory exists
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -45,7 +45,7 @@ func NewBoltDBIndexer(path string, scheme *runtime.Scheme, keyFunc KeyFunc, inde
 		return nil, fmt.Errorf("opening BoltDB at %q: %w", path, err)
 	}
 
-	threadSafeStore, err := NewBoltThreadSafeStore(db, scheme, indexers, Indices{}, 0, 0)
+	threadSafeStore, err := NewBoltThreadSafeStore(db, exampleObject, indexers, Indices{}, 0, 0)
 	if err != nil {
 		db.Close()
 		return nil, err
@@ -62,8 +62,8 @@ func NewBoltDBIndexer(path string, scheme *runtime.Scheme, keyFunc KeyFunc, inde
 }
 
 // NewBoltDBIndexerWithDB creates an Indexer backed by an existing BoltDB instance.
-func NewBoltDBIndexerWithDB(db *bbolt.DB, scheme *runtime.Scheme, keyFunc KeyFunc, indexers Indexers) (Indexer, error) {
-	threadSafeStore, err := NewBoltThreadSafeStore(db, scheme, indexers, Indices{}, 0, 0)
+func NewBoltDBIndexerWithDB(db *bbolt.DB, exampleObject runtime.Object, keyFunc KeyFunc, indexers Indexers) (Indexer, error) {
+	threadSafeStore, err := NewBoltThreadSafeStore(db, exampleObject, indexers, Indices{}, 0, 0)
 	if err != nil {
 		return nil, err
 	}

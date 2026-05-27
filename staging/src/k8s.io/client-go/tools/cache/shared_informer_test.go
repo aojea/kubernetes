@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -1384,4 +1386,71 @@ func numOccurrences(hay, needle string) int {
 		count++
 		hay = hay[index+len(needle):]
 	}
+}
+
+func TestSharedIndexInformerWithBoltDB(t *testing.T) {
+	// The Ultimate Developer Experience: just choose PersistentStorage: true!
+	options := SharedIndexInformerOptions{
+		PersistentStorage: true,
+		Indexers: Indexers{
+			"namespace": func(obj interface{}) ([]string, error) {
+				return []string{obj.(*v1.Pod).Namespace}, nil
+			},
+		},
+	}
+
+	source := newFakeControllerSource(t)
+	pod1 := &v1.Pod{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
+		ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "ns1", UID: "pod1", ResourceVersion: "1"},
+	}
+	pod2 := &v1.Pod{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
+		ObjectMeta: metav1.ObjectMeta{Name: "pod2", Namespace: "ns1", UID: "pod2", ResourceVersion: "2"},
+	}
+	source.Add(pod1)
+	source.Add(pod2)
+
+	// Create informer. Path naming and Scheme dynamic extraction happen automatically under the hood!
+	informer := NewSharedIndexInformerWithOptions(source, &v1.Pod{}, options)
+
+	var wg wait.Group
+	stop := make(chan struct{})
+	wg.StartWithChannel(stop, informer.Run)
+	defer func() {
+		close(stop)
+		wg.Wait()
+	}()
+
+	WaitForCacheSync(stop, informer.HasSynced)
+
+	// Verify standard retrieval (Get) fetches the objects perfectly from the disk store!
+	item, exists, err := informer.GetStore().Get(pod1)
+	if err != nil {
+		t.Fatalf("Get store failed: %v", err)
+	}
+	if !exists {
+		t.Fatal("Expected pod1 to exist in the BoltDB-backed informer store")
+	}
+	if item.(*v1.Pod).Name != "pod1" {
+		t.Errorf("Expected pod1, got %q", item.(*v1.Pod).Name)
+	}
+
+	// Verify secondary index lookups (ByIndex) fetch the correct matched slices perfectly!
+	res, err := informer.GetIndexer().ByIndex("namespace", "ns1")
+	if err != nil {
+		t.Fatalf("ByIndex lookup failed: %v", err)
+	}
+	if len(res) != 2 {
+		t.Errorf("Expected 2 pods in namespace index, got %d", len(res))
+	}
+
+	// Verify well-known path database file actually exists!
+	expectedFile := filepath.Join(os.TempDir(), "kubernetes", "client-go", "cache", "informer-pod.db")
+	t.Logf("Expected database file path resolved in test: %q", expectedFile)
+	if _, err := os.Stat(expectedFile); os.IsNotExist(err) {
+		t.Errorf("Expected database file to be automatically created at %q, but it does not exist", expectedFile)
+	}
+	// Clean up db file
+	_ = os.Remove(expectedFile)
 }

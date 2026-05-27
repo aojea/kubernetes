@@ -31,8 +31,7 @@ func TestBoltDBStoreNew(t *testing.T) {
 		return obj.(*TestObject).Value, nil
 	}
 
-	scheme := setupTestScheme()
-	store, err := NewBoltDBStore(dbPath, scheme, testKeyFunc)
+	store, err := NewBoltDBStore(dbPath, &TestObject{}, testKeyFunc)
 	if err != nil {
 		t.Fatalf("Failed to create BoltDBStore: %v", err)
 	}
@@ -71,8 +70,7 @@ func BenchmarkStoreAddBoltDB(b *testing.B) {
 		return obj.(*TestObject).Value, nil
 	}
 
-	scheme := setupTestScheme()
-	store, err := NewBoltDBStore(dbPath, scheme, benchKeyFunc)
+	store, err := NewBoltDBStore(dbPath, &TestObject{}, benchKeyFunc)
 	if err != nil {
 		b.Fatalf("Failed to create BoltDBStore: %v", err)
 	}
@@ -96,8 +94,7 @@ func BenchmarkStoreGetBoltDB(b *testing.B) {
 		return obj.(*TestObject).Value, nil
 	}
 
-	scheme := setupTestScheme()
-	store, err := NewBoltDBStore(dbPath, scheme, benchKeyFunc)
+	store, err := NewBoltDBStore(dbPath, &TestObject{}, benchKeyFunc)
 	if err != nil {
 		b.Fatalf("Failed to create BoltDBStore: %v", err)
 	}

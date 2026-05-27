@@ -80,14 +80,13 @@ func TestBoltThreadSafeStoreLifecycle(t *testing.T) {
 	}
 	defer db.Close()
 
-	scheme := setupTestScheme()
 	indexers := Indexers{
 		"by_value": func(obj interface{}) ([]string, error) {
 			return []string{obj.(*TestObject).Value}, nil
 		},
 	}
 
-	store, err := NewBoltThreadSafeStore(db, scheme, indexers, Indices{}, 0, 0)
+	store, err := NewBoltThreadSafeStore(db, &TestObject{}, indexers, Indices{}, 0, 0)
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
@@ -162,14 +161,13 @@ func TestBoltThreadSafeStoreBootstrapAndReplace(t *testing.T) {
 	}
 	defer db.Close()
 
-	scheme := setupTestScheme()
 	indexers := Indexers{
 		"by_value": func(obj interface{}) ([]string, error) {
 			return []string{obj.(*TestObject).Value}, nil
 		},
 	}
 
-	store, err := NewBoltThreadSafeStore(db, scheme, indexers, Indices{}, 0, 0)
+	store, err := NewBoltThreadSafeStore(db, &TestObject{}, indexers, Indices{}, 0, 0)
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
@@ -190,7 +188,7 @@ func TestBoltThreadSafeStoreBootstrapAndReplace(t *testing.T) {
 		t.Fatalf("Failed to reopen db: %v", err)
 	}
 
-	store, err = NewBoltThreadSafeStore(db, scheme, indexers, Indices{}, 0, 0)
+	store, err = NewBoltThreadSafeStore(db, &TestObject{}, indexers, Indices{}, 0, 0)
 	if err != nil {
 		t.Fatalf("Failed to reconstruct store on restart: %v", err)
 	}
@@ -234,14 +232,13 @@ func TestBoltThreadSafeStoreTransaction(t *testing.T) {
 	}
 	defer db.Close()
 
-	scheme := setupTestScheme()
 	indexers := Indexers{
 		"by_value": func(obj interface{}) ([]string, error) {
 			return []string{obj.(*TestObject).Value}, nil
 		},
 	}
 
-	store, err := NewBoltThreadSafeStore(db, scheme, indexers, Indices{}, 0, 0)
+	store, err := NewBoltThreadSafeStore(db, &TestObject{}, indexers, Indices{}, 0, 0)
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
@@ -297,14 +294,13 @@ func TestBoltThreadSafeStoreCorruptionRecovery(t *testing.T) {
 		t.Fatalf("Failed to open db: %v", err)
 	}
 
-	scheme := setupTestScheme()
 	indexers := Indexers{
 		"by_value": func(obj interface{}) ([]string, error) {
 			return []string{obj.(*TestObject).Value}, nil
 		},
 	}
 
-	store, err := NewBoltThreadSafeStore(db, scheme, indexers, Indices{}, 0, 0)
+	store, err := NewBoltThreadSafeStore(db, &TestObject{}, indexers, Indices{}, 0, 0)
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
@@ -336,7 +332,7 @@ func TestBoltThreadSafeStoreCorruptionRecovery(t *testing.T) {
 
 	// Start store again with the corrupted DB. The constructor MUST catch the decode error,
 	// wipe the database, reset the state, and start fresh successfully!
-	store, err = NewBoltThreadSafeStore(db, scheme, indexers, Indices{}, 0, 0)
+	store, err = NewBoltThreadSafeStore(db, &TestObject{}, indexers, Indices{}, 0, 0)
 	if err != nil {
 		t.Fatalf("Expected store to successfully recover and initialize, but got error: %v", err)
 	}
@@ -363,14 +359,13 @@ func TestBoltThreadSafeStoreCompactor(t *testing.T) {
 		t.Fatalf("Failed to open db: %v", err)
 	}
 
-	scheme := setupTestScheme()
 	indexers := Indexers{
 		"by_value": func(obj interface{}) ([]string, error) {
 			return []string{obj.(*TestObject).Value}, nil
 		},
 	}
 
-	store, err := NewBoltThreadSafeStore(db, scheme, indexers, Indices{}, 0, 0)
+	store, err := NewBoltThreadSafeStore(db, &TestObject{}, indexers, Indices{}, 0, 0)
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
@@ -424,14 +419,13 @@ func TestBoltThreadSafeStoreConcurrencyStress(t *testing.T) {
 	}
 	defer db.Close()
 
-	scheme := setupTestScheme()
 	indexers := Indexers{
 		"by_value": func(obj interface{}) ([]string, error) {
 			return []string{obj.(*TestObject).Value}, nil
 		},
 	}
 
-	store, err := NewBoltThreadSafeStore(db, scheme, indexers, Indices{}, 0, 0)
+	store, err := NewBoltThreadSafeStore(db, &TestObject{}, indexers, Indices{}, 0, 0)
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
@@ -511,8 +505,7 @@ func BenchmarkStoreAdd_BoltDB(b *testing.B) {
 	}
 	defer db.Close()
 
-	scheme := setupTestScheme()
-	store, err := NewBoltThreadSafeStore(db, scheme, Indexers{}, Indices{}, 0, 0)
+	store, err := NewBoltThreadSafeStore(db, &TestObject{}, Indexers{}, Indices{}, 0, 0)
 	if err != nil {
 		b.Fatalf("Failed to create BoltDB store: %v", err)
 	}
@@ -551,8 +544,7 @@ func BenchmarkStoreGet_BoltDB(b *testing.B) {
 	}
 	defer db.Close()
 
-	scheme := setupTestScheme()
-	store, err := NewBoltThreadSafeStore(db, scheme, Indexers{}, Indices{}, 0, 0)
+	store, err := NewBoltThreadSafeStore(db, &TestObject{}, Indexers{}, Indices{}, 0, 0)
 	if err != nil {
 		b.Fatalf("Failed to create BoltDB store: %v", err)
 	}
@@ -591,8 +583,7 @@ func BenchmarkStoreList_BoltDB(b *testing.B) {
 	}
 	defer db.Close()
 
-	scheme := setupTestScheme()
-	store, err := NewBoltThreadSafeStore(db, scheme, Indexers{}, Indices{}, 0, 0)
+	store, err := NewBoltThreadSafeStore(db, &TestObject{}, Indexers{}, Indices{}, 0, 0)
 	if err != nil {
 		b.Fatalf("Failed to create BoltDB store: %v", err)
 	}
@@ -637,13 +628,12 @@ func BenchmarkStoreByIndex_BoltDB(b *testing.B) {
 	}
 	defer db.Close()
 
-	scheme := setupTestScheme()
 	indexers := Indexers{
 		"by_val": func(obj interface{}) ([]string, error) {
 			return []string{obj.(*TestObject).Value}, nil
 		},
 	}
-	store, err := NewBoltThreadSafeStore(db, scheme, indexers, Indices{}, 0, 0)
+	store, err := NewBoltThreadSafeStore(db, &TestObject{}, indexers, Indices{}, 0, 0)
 	if err != nil {
 		b.Fatalf("Failed to create BoltDB store: %v", err)
 	}
@@ -711,8 +701,7 @@ func TestBoltThreadSafeStoreMemorySavings(t *testing.T) {
 		}
 		defer db.Close()
 
-		scheme := setupTestScheme()
-		boltStore, err := NewBoltThreadSafeStore(db, scheme, Indexers{}, Indices{}, 0, 0)
+		boltStore, err := NewBoltThreadSafeStore(db, &TestObject{}, Indexers{}, Indices{}, 0, 0)
 		if err != nil {
 			t.Fatalf("Failed to create BoltDB store: %v", err)
 		}
@@ -763,14 +752,13 @@ func TestBoltThreadSafeStoreL1Cache(t *testing.T) {
 		t.Fatalf("Failed to open db: %v", err)
 	}
 
-	scheme := setupTestScheme()
 	indexers := Indexers{
 		"by_value": func(obj interface{}) ([]string, error) {
 			return []string{obj.(*TestObject).Value}, nil
 		},
 	}
 
-	store, err := NewBoltThreadSafeStore(db, scheme, indexers, Indices{}, 0, 0)
+	store, err := NewBoltThreadSafeStore(db, &TestObject{}, indexers, Indices{}, 0, 0)
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}

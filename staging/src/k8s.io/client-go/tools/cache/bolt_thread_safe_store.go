@@ -20,11 +20,13 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"reflect"
 	"sync"
 	"time"
 
 	"go.etcd.io/bbolt"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	jsonserializer "k8s.io/apimachinery/pkg/runtime/serializer/json"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
@@ -48,8 +50,8 @@ type boltThreadSafeMap struct {
 	bucketName     []byte
 	metaBucketName []byte
 
-	scheme     *runtime.Scheme
-	serializer runtime.Serializer
+	exampleType reflect.Type
+	serializer  runtime.Serializer
 
 	lock sync.RWMutex
 	// index holds in-memory index mappings (index value -> set of string keys)
@@ -64,10 +66,10 @@ var _ ThreadSafeStore = &boltThreadSafeMap{}
 var _ ThreadSafeStoreWithTransaction = &boltThreadSafeMap{}
 
 // NewBoltThreadSafeStore creates a ThreadSafeStore backed by BoltDB and in-memory indexes.
-func NewBoltThreadSafeStore(db *bbolt.DB, scheme *runtime.Scheme, indexers Indexers, indices Indices, compactionInterval time.Duration, compactionThreshold float64) (ThreadSafeStore, error) {
+func NewBoltThreadSafeStore(db *bbolt.DB, exampleObject runtime.Object, indexers Indexers, indices Indices, compactionInterval time.Duration, compactionThreshold float64) (ThreadSafeStore, error) {
 	// Fail-Fast Guardrail: Nil check to ensure we don't get runtime panic during deserialization
-	if scheme == nil {
-		return nil, fmt.Errorf("cannot initialize BoltThreadSafeStore with a nil runtime.Scheme")
+	if exampleObject == nil {
+		return nil, fmt.Errorf("cannot initialize BoltThreadSafeStore with a nil exampleObject")
 	}
 
 	bucketName := []byte("items")
@@ -89,12 +91,22 @@ func NewBoltThreadSafeStore(db *bbolt.DB, scheme *runtime.Scheme, indexers Index
 		return nil, err
 	}
 
+	// 1. Extract Type safely for the decode phase (Guard against reflect panic)
+	t := reflect.TypeOf(exampleObject)
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+
+	// 2. Build completely generic dynamic creater and typer to handle JSON codec with 100% zero Scheme dependency!
+	creater := dynamicCreater{exampleType: t}
+	typer := dynamicTyper{}
+
 	s := &boltThreadSafeMap{
 		db:             db,
 		bucketName:     bucketName,
 		metaBucketName: metaBucketName,
-		scheme:         scheme,
-		serializer:     jsonserializer.NewSerializerWithOptions(jsonserializer.DefaultMetaFactory, scheme, scheme, jsonserializer.SerializerOptions{Yaml: false, Pretty: false, Strict: false}),
+		exampleType:    t,
+		serializer:     jsonserializer.NewSerializerWithOptions(jsonserializer.DefaultMetaFactory, creater, typer, jsonserializer.SerializerOptions{Yaml: false, Pretty: false, Strict: false}),
 		index: &storeIndex{
 			indexers: indexers,
 			indices:  indices,
@@ -534,7 +546,7 @@ func (s *boltThreadSafeMap) ByIndex(indexName, indexedValue string) ([]interface
 			return nil
 		}
 
-		var decodedItems []interface{}
+		successfullyDecoded := make(map[string]interface{}, len(missKeys))
 		for _, key := range missKeys {
 			data := bucket.Get([]byte(key))
 			if data != nil {
@@ -544,17 +556,15 @@ func (s *boltThreadSafeMap) ByIndex(indexName, indexedValue string) ([]interface
 					continue
 				}
 				items = append(items, decoded)
-				decodedItems = append(decodedItems, decoded)
+				successfullyDecoded[key] = decoded
 			}
 		}
 
-		// Update the L1 LRU with the newly fetched items
-		if len(decodedItems) > 0 {
+		// Update the L1 LRU with guaranteed alignment
+		if len(successfullyDecoded) > 0 {
 			s.lock.Lock()
-			for i, key := range missKeys {
-				if i < len(decodedItems) {
-					s.lruCache.Add(key, decodedItems[i])
-				}
+			for k, v := range successfullyDecoded {
+				s.lruCache.Add(k, v)
 			}
 			s.lock.Unlock()
 		}
@@ -754,4 +764,26 @@ func (s *boltThreadSafeMap) compactIfNeeded(threshold float64) {
 		panic(fmt.Sprintf("CRITICAL: BoltDB database reopen failed after compaction swap: %v", err))
 	}
 	s.db = newDB
+}
+
+type dynamicTyper struct{}
+
+func (t dynamicTyper) ObjectKinds(obj runtime.Object) ([]schema.GroupVersionKind, bool, error) {
+	tRef := reflect.TypeOf(obj)
+	if tRef.Kind() == reflect.Ptr {
+		tRef = tRef.Elem()
+	}
+	return []schema.GroupVersionKind{{Group: "", Version: "v1", Kind: tRef.Name()}}, false, nil
+}
+
+func (t dynamicTyper) Recognizes(gvk schema.GroupVersionKind) bool {
+	return true
+}
+
+type dynamicCreater struct {
+	exampleType reflect.Type
+}
+
+func (c dynamicCreater) New(kind schema.GroupVersionKind) (runtime.Object, error) {
+	return reflect.New(c.exampleType).Interface().(runtime.Object), nil
 }
