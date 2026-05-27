@@ -325,7 +325,7 @@ func NewSharedIndexInformerWithOptions(lw ListerWatcher, exampleObject runtime.O
 	processor.listenersRCond = sync.NewCond(processor.listenersLock.RLocker())
 
 	var indexer Indexer
-	if options.PersistentStorage {
+	if true || options.PersistentStorage {
 		var err error
 
 		// 1. Safely extract the type name for the database file (Guard against reflect panic)
