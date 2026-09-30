@@ -1767,6 +1767,10 @@ func (m *kubeGenericRuntimeManager) SyncPod(ctx context.Context, pod *v1.Pod, po
 			// Overwrite the podIPs passed in the pod status, since we just started the pod sandbox.
 			podIPs = m.determinePodSandboxIPs(ctx, pod.Namespace, pod.Name, resp.GetStatus())
 			logger.V(4).Info("Determined the ip for pod after sandbox changed", "IPs", podIPs, "pod", klog.KObj(pod))
+			// The API server rejects podIPs on these pods; surface the runtime bug here.
+			if kubecontainer.IsNetworkIsolatedPod(pod) && len(podIPs) > 0 {
+				logger.Error(nil, "Runtime attached a defaultNetwork None sandbox to the pod network", "pod", klog.KObj(pod), "podSandboxID", podSandboxID, "IPs", podIPs)
+			}
 		}
 
 		// Step 5: invoke the sandbox ready callback before image pulling .

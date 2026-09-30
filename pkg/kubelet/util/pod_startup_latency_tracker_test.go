@@ -29,6 +29,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/metrics"
 	"k8s.io/kubernetes/test/utils/ktesting"
 	testingclock "k8s.io/utils/clock/testing"
+	"k8s.io/utils/ptr"
 )
 
 var frozenTime = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -765,6 +766,18 @@ kubelet_first_network_pod_start_sli_duration_seconds 30
 		hostNetworkPodStarted.Spec.HostNetwork = true
 		tracker.RecordStatusUpdated(logger, hostNetworkPodStarted)
 
+		// network isolated pods never touch the pod network either
+		isolatedPodInitializing := buildInitializingPod()
+		isolatedPodInitializing.UID = "33333-44444"
+		isolatedPodInitializing.Spec.DefaultNetwork = ptr.To(corev1.PodDefaultNetworkNone)
+		tracker.ObservedPodOnWatch(logger, isolatedPodInitializing, frozenTime)
+
+		isolatedPodStarted := buildRunningPod()
+		isolatedPodStarted.UID = "33333-44444"
+		isolatedPodStarted.Spec.DefaultNetwork = ptr.To(corev1.PodDefaultNetworkNone)
+		tracker.RecordStatusUpdated(logger, isolatedPodStarted)
+		tracker.ObservedPodOnWatch(logger, isolatedPodStarted, frozenTime.Add(time.Second*15))
+
 		// track only the first pod with network
 		podInitializing := buildInitializingPod()
 		tracker.ObservedPodOnWatch(logger, podInitializing, frozenTime)
@@ -791,6 +804,7 @@ kubelet_first_network_pod_start_sli_duration_seconds 30
 
 		// cleanup
 		tracker.DeletePodStartupState(hostNetworkPodStarted.UID)
+		tracker.DeletePodStartupState(isolatedPodStarted.UID)
 		tracker.DeletePodStartupState(podStarted.UID)
 
 		assert.Empty(t, tracker.pods)
