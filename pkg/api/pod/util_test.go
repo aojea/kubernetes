@@ -4646,6 +4646,78 @@ func TestDropHostnameOverride(t *testing.T) {
 	}
 }
 
+func TestDropDefaultNetwork(t *testing.T) {
+	podWithoutDefaultNetwork := func() *api.Pod {
+		return &api.Pod{Spec: api.PodSpec{}}
+	}
+	podWithDefaultNetwork := func() *api.Pod {
+		return &api.Pod{
+			Spec: api.PodSpec{
+				DefaultNetwork: ptr.To(api.PodDefaultNetworkNone),
+			},
+		}
+	}
+
+	podInfo := []struct {
+		description       string
+		hasDefaultNetwork bool
+		pod               func() *api.Pod
+	}{
+		{
+			description:       "nil",
+			hasDefaultNetwork: false,
+			pod:               func() *api.Pod { return nil },
+		},
+		{
+			description:       "with DefaultNetwork",
+			hasDefaultNetwork: true,
+			pod:               podWithDefaultNetwork,
+		},
+		{
+			description:       "without DefaultNetwork",
+			hasDefaultNetwork: false,
+			pod:               podWithoutDefaultNetwork,
+		},
+	}
+
+	for _, enabled := range []bool{true, false} {
+		for _, oldPodInfo := range podInfo {
+			for _, newPodInfo := range podInfo[1:] {
+				oldPodHasDefaultNetwork, oldPod := oldPodInfo.hasDefaultNetwork, oldPodInfo.pod()
+				newPodHasDefaultNetwork, newPod := newPodInfo.hasDefaultNetwork, newPodInfo.pod()
+
+				t.Run(fmt.Sprintf("feature enabled=%v, old pod %v, new pod %v", enabled, oldPodInfo.description, newPodInfo.description), func(t *testing.T) {
+					featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodDefaultNetwork, enabled)
+
+					var oldTemplate *api.PodTemplateSpec
+					if oldPod != nil {
+						oldTemplate = &api.PodTemplateSpec{Spec: *oldPod.Spec.DeepCopy()}
+					}
+					newTemplate := &api.PodTemplateSpec{Spec: *newPod.Spec.DeepCopy()}
+
+					DropDisabledPodFields(newPod, oldPod)
+					DropDisabledTemplateFields(newTemplate, oldTemplate)
+
+					if !reflect.DeepEqual(oldPod, oldPodInfo.pod()) {
+						t.Errorf("old pod changed: %v", cmp.Diff(oldPod, oldPodInfo.pod()))
+					}
+
+					wantPod := newPodInfo.pod()
+					if !enabled && !oldPodHasDefaultNetwork && newPodHasDefaultNetwork {
+						wantPod = podWithoutDefaultNetwork()
+					}
+					if !reflect.DeepEqual(newPod, wantPod) {
+						t.Errorf("unexpected pod after DropDisabledPodFields: %v", cmp.Diff(newPod, wantPod))
+					}
+					if !reflect.DeepEqual(newTemplate.Spec, wantPod.Spec) {
+						t.Errorf("unexpected template spec after DropDisabledTemplateFields: %v", cmp.Diff(newTemplate.Spec, wantPod.Spec))
+					}
+				})
+			}
+		}
+	}
+}
+
 func TestDropEmptyDirVolumeMode(t *testing.T) {
 	mode := int32(0o755)
 
