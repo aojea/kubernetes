@@ -457,10 +457,15 @@ type NodeTopologyHandler interface {
 
 // NodeTopologyConfig tracks node topology labels.
 type NodeTopologyConfig struct {
-	listerSynced   cache.InformerSynced
+	listerSynced cache.InformerSynced
+	logger       klog.Logger
+
+	// mu protects eventHandlers and topologyLabels. The informer may already be
+	// running when NodeTopologyConfig is created, so handleNodeEvent can run
+	// concurrently with RegisterEventHandler.
+	mu             sync.Mutex
 	eventHandlers  []NodeTopologyHandler
 	topologyLabels map[string]string
-	logger         klog.Logger
 }
 
 // NewNodeTopologyConfig creates a new NodeTopologyConfig.
@@ -500,8 +505,20 @@ func newNodeTopologyConfig(ctx context.Context, nodeInformer v1informers.NodeInf
 }
 
 // RegisterEventHandler registers a handler which is called on Node object change.
+// If topology labels were already observed, the handler is called immediately with
+// the current labels.
 func (n *NodeTopologyConfig) RegisterEventHandler(handler NodeTopologyHandler) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	n.eventHandlers = append(n.eventHandlers, handler)
+	// If the informer was already running, it may have replayed the cached Node
+	// before this handler was registered. Deliver the current state so the
+	// handler does not miss it; later updates with the same labels are skipped.
+	if len(n.topologyLabels) > 0 {
+		n.logger.V(4).Info("Calling handler.OnTopologyChange")
+		handler.OnTopologyChange(n.topologyLabels)
+	}
 }
 
 // handleNodeEvent is a helper function to handle Add, Update and Delete
@@ -517,6 +534,9 @@ func (n *NodeTopologyConfig) handleNodeEvent(obj interface{}) {
 	if _, ok = node.Labels[v1.LabelTopologyZone]; ok {
 		topologyLabels[v1.LabelTopologyZone] = node.Labels[v1.LabelTopologyZone]
 	}
+
+	n.mu.Lock()
+	defer n.mu.Unlock()
 
 	// skip calling event handlers when no change in topology labels
 	if reflect.DeepEqual(n.topologyLabels, topologyLabels) {

@@ -37,6 +37,7 @@ import (
 	informers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 	ktesting "k8s.io/client-go/testing"
+	"k8s.io/client-go/tools/cache"
 	klogtesting "k8s.io/klog/v2/ktesting"
 	"k8s.io/utils/ptr"
 )
@@ -855,6 +856,58 @@ func TestNewNodeTopologyConfig(t *testing.T) {
 	err = waitForInvocation(invoked)
 	require.NoError(t, err)
 	require.Len(t, handler.topologyLabels, 1)
+}
+
+// TestNodeTopologyConfigLateRegistration verifies that a handler registered after the
+// informer has already replayed the cached Node still receives the current topology
+// labels. This is kube-proxy's startup order: NodeManager starts and syncs the Node
+// informer before NodeTopologyConfig is created, so adding the informer callback
+// replays the Node on another goroutine, which may run before RegisterEventHandler.
+func TestNodeTopologyConfigLateRegistration(t *testing.T) {
+	_, ctx := klogtesting.NewTestContext(t)
+	node := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "test-node",
+			Labels: map[string]string{v1.LabelTopologyZone: "us-west-2a"},
+		},
+	}
+	client := fake.NewClientset(node)
+
+	stopCh := make(chan struct{})
+	defer close(stopCh)
+
+	sharedInformers := informers.NewSharedInformerFactory(client, time.Minute)
+	nodeInformer := sharedInformers.Core().V1().Nodes()
+	informer := nodeInformer.Informer()
+	sharedInformers.Start(stopCh)
+	require.True(t, cache.WaitForCacheSync(stopCh, informer.HasSynced))
+
+	invoked := make(chan struct{}, 1)
+	config := newNodeTopologyConfig(ctx, nodeInformer, time.Minute, func() {
+		invoked <- struct{}{}
+	})
+	// Force the losing interleaving: the cached Node is replayed before any
+	// handler is registered.
+	require.NoError(t, waitForInvocation(invoked))
+
+	handler := &nodeTopologyHandlerMock{}
+	config.RegisterEventHandler(handler)
+	require.Equal(t, map[string]string{v1.LabelTopologyZone: "us-west-2a"}, handler.topologyLabels)
+
+	// An update with the same zone is still deduplicated.
+	handler.topologyLabels = nil
+	node.Annotations = map[string]string{"touch": "1"}
+	_, err := client.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
+	require.NoError(t, err)
+	require.NoError(t, waitForInvocation(invoked))
+	require.Nil(t, handler.topologyLabels)
+
+	// A zone change is still delivered.
+	node.Labels[v1.LabelTopologyZone] = "us-west-2b"
+	_, err = client.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
+	require.NoError(t, err)
+	require.NoError(t, waitForInvocation(invoked))
+	require.Equal(t, map[string]string{v1.LabelTopologyZone: "us-west-2b"}, handler.topologyLabels)
 }
 
 // TODO: Add a unittest for interrupts getting processed in a timely manner.
