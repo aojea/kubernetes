@@ -631,6 +631,9 @@ func (s *ProxyServer) Run(ctx context.Context) error {
 
 	// hollow-proxy doesn't need node config, and we don't create nodeManager for hollow-proxy.
 	if s.NodeManager != nil {
+		// NodeManager has already started and synced the node informer, so
+		// adding a handler replays the cached Node immediately. Handlers must
+		// be attached in one step; see pkg/proxy/config/doc.go.
 		nodeConfig := config.NewNodeConfig(ctx, s.NodeManager.NodeInformer(), s.Config.ConfigSyncPeriod.Duration)
 		nodeConfig.RegisterEventHandler(s.NodeManager)
 		config.NewNodeTopologyConfig(ctx, s.NodeManager.NodeInformer(), s.Config.ConfigSyncPeriod.Duration, s.Proxier)
