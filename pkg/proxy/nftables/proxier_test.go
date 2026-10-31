@@ -37,13 +37,16 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/sets"
+	clientsetfake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/component-base/metrics/testutil"
+	"k8s.io/klog/v2/ktesting"
 	"k8s.io/kubernetes/pkg/proxy"
 	kubeproxyconfig "k8s.io/kubernetes/pkg/proxy/apis/config"
 	"k8s.io/kubernetes/pkg/proxy/conntrack"
 	"k8s.io/kubernetes/pkg/proxy/healthcheck"
 	"k8s.io/kubernetes/pkg/proxy/localnodeportproxy"
 	"k8s.io/kubernetes/pkg/proxy/metrics"
+	"k8s.io/kubernetes/pkg/proxy/nodemanager"
 	"k8s.io/kubernetes/pkg/proxy/runner"
 	proxyutil "k8s.io/kubernetes/pkg/proxy/util"
 	proxyutiltest "k8s.io/kubernetes/pkg/proxy/util/testing"
@@ -3134,6 +3137,115 @@ func TestInternalTrafficPolicy(t *testing.T) {
 					destIP:   "172.30.1.1",
 					destPort: 80,
 					output:   "REJECT",
+				},
+			})
+		})
+	}
+}
+
+// TestTopologyZoneFromNodeManager is a regression test for a startup race where the
+// proxier could miss the node's zone label and ignore same-zone topology hints until
+// restart. The NodeManager informer is started and synced before the proxier exists,
+// matching kube-proxy's startup order, and the proxier must use the zone on its
+// first sync.
+func TestTopologyZoneFromNodeManager(t *testing.T) {
+	type endpoint struct {
+		ip   string
+		zone string
+	}
+	endpoints := []endpoint{
+		{"10.0.1.1", "zone-a"},
+		{"10.0.1.2", "zone-b"},
+		{"10.0.1.3", "zone-a"},
+	}
+
+	testCases := []struct {
+		name     string
+		line     string
+		nodeZone string
+		output   string
+	}{
+		{
+			name:     "node in a hinted zone only gets same-zone endpoints",
+			line:     getLine(),
+			nodeZone: "zone-a",
+			output:   "10.0.1.1:80, 10.0.1.3:80",
+		},
+		{
+			name:     "node without zone label gets all endpoints",
+			line:     getLine(),
+			nodeZone: "",
+			output:   "10.0.1.1:80, 10.0.1.2:80, 10.0.1.3:80",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, ctx := ktesting.NewTestContext(t)
+			node := &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{Name: testNodeName},
+				Status: v1.NodeStatus{Addresses: []v1.NodeAddress{
+					{Type: v1.NodeInternalIP, Address: testNodeIP},
+				}},
+			}
+			if tc.nodeZone != "" {
+				node.Labels = map[string]string{v1.LabelTopologyZone: tc.nodeZone}
+			}
+			client := clientsetfake.NewClientset(node)
+			nodeManager, err := nodemanager.New(ctx, client, testNodeName, &kubeproxyconfig.KubeProxyConfiguration{
+				ConfigSyncPeriod: metav1.Duration{Duration: 15 * time.Minute},
+			})
+			if err != nil {
+				t.Fatalf("unexpected error creating NodeManager: %v", err)
+			}
+
+			nft, fp := NewFakeProxier(v1.IPv4Protocol)
+			fp.topologyLabels = nodeManager.TopologyLabels()
+			fp.OnServiceSynced()
+			fp.OnEndpointSlicesSynced()
+
+			svc := &v1.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: "svc1", Namespace: "ns1"},
+				Spec: v1.ServiceSpec{
+					ClusterIP: "172.30.1.1",
+					Selector:  map[string]string{"foo": "bar"},
+					Ports:     []v1.ServicePort{{Name: "", Port: 80, Protocol: v1.ProtocolTCP}},
+				},
+			}
+			fp.OnServiceAdd(svc)
+
+			endpointSlice := &discovery.EndpointSlice{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "svc1-1",
+					Namespace: "ns1",
+					Labels:    map[string]string{discovery.LabelServiceName: "svc1"},
+				},
+				Ports: []discovery.EndpointPort{{
+					Name:     ptr.To(""),
+					Port:     ptr.To[int32](80),
+					Protocol: ptr.To(v1.ProtocolTCP),
+				}},
+				AddressType: discovery.AddressTypeIPv4,
+			}
+			for _, ep := range endpoints {
+				endpointSlice.Endpoints = append(endpointSlice.Endpoints, discovery.Endpoint{
+					Addresses:  []string{ep.ip},
+					Conditions: discovery.EndpointConditions{Ready: ptr.To(true)},
+					Zone:       ptr.To(ep.zone),
+					Hints:      &discovery.EndpointHints{ForZones: []discovery.ForZone{{Name: ep.zone}}},
+				})
+			}
+			fp.OnEndpointSliceAdd(endpointSlice)
+
+			fp.syncProxyRules()
+			runPacketFlowTests(t, tc.line, nft, testNodeIPs, []packetFlowTest{
+				{
+					name:     "pod to ClusterIP",
+					sourceIP: "10.0.0.2",
+					destIP:   "172.30.1.1",
+					destPort: 80,
+					output:   tc.output,
+					masq:     false,
 				},
 			})
 		})

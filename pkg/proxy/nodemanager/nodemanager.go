@@ -61,6 +61,10 @@ type NodeManager interface {
 	// PodCIDRs returns the node's PodCIDRs.
 	PodCIDRs() []string
 
+	// TopologyLabels returns the node's proxy-relevant topology labels. (If the
+	// NodeManager failed to get the node, this will return an empty map.)
+	TopologyLabels() map[string]string
+
 	// Node returns a copy of the latest node object, or nil if the Node has not yet
 	// been seen.
 	Node() *v1.Node
@@ -81,6 +85,7 @@ type nodeManager struct {
 	primaryIPFamily v1.IPFamily
 	nodeIPs         map[v1.IPFamily]net.IP
 	podCIDRs        []string
+	topologyLabels  map[string]string
 
 	mu   sync.Mutex
 	node *v1.Node
@@ -169,6 +174,15 @@ func newNodeManager(ctx context.Context, client clientset.Interface, resyncInter
 
 	primaryIPFamily, nodeIPs := detectNodeIPs(rawNodeIPs, nodeIPOverride)
 
+	// Only the zone label is proxy-relevant, and it is treated as immutable
+	// for the lifetime of the node.
+	topologyLabels := make(map[string]string)
+	if node != nil {
+		if zone, ok := node.Labels[v1.LabelTopologyZone]; ok {
+			topologyLabels[v1.LabelTopologyZone] = zone
+		}
+	}
+
 	return &nodeManager{
 		nodeInformer:  nodeInformer,
 		nodeLister:    nodeLister,
@@ -181,6 +195,7 @@ func newNodeManager(ctx context.Context, client clientset.Interface, resyncInter
 		primaryIPFamily: primaryIPFamily,
 		nodeIPs:         nodeIPs,
 		podCIDRs:        podCIDRs,
+		topologyLabels:  topologyLabels,
 	}, nil
 }
 
@@ -250,6 +265,12 @@ func (n *nodeManager) NodeIPs() map[v1.IPFamily]net.IP {
 // PodCIDRs returns the node's PodCIDRs.
 func (n *nodeManager) PodCIDRs() []string {
 	return n.podCIDRs
+}
+
+// TopologyLabels returns the node's proxy-relevant topology labels. (If the NodeManager
+// failed to get the node, this will return an empty map.)
+func (n *nodeManager) TopologyLabels() map[string]string {
+	return n.topologyLabels
 }
 
 // Node returns a copy of the latest node object, or nil if the Node has not yet been seen.

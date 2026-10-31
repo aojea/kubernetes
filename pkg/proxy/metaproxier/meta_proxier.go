@@ -128,12 +128,6 @@ func (proxier *metaProxier) OnEndpointSlicesSynced() {
 	proxier.ipv6Proxier.OnEndpointSlicesSynced()
 }
 
-// OnTopologyChange is called whenever change in proxy relevant topology labels is observed.
-func (proxier *metaProxier) OnTopologyChange(topologyLabels map[string]string) {
-	proxier.ipv4Proxier.OnTopologyChange(topologyLabels)
-	proxier.ipv6Proxier.OnTopologyChange(topologyLabels)
-}
-
 // OnServiceCIDRsChanged is called whenever a change is observed
 // in any of the ServiceCIDRs, and provides complete list of service cidrs.
 func (proxier *metaProxier) OnServiceCIDRsChanged(cidrs []string) {

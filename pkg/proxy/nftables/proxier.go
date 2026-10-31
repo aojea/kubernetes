@@ -118,20 +118,21 @@ func NewDualStackProxier(
 	localDetectors map[v1.IPFamily]proxyutil.LocalTrafficDetector,
 	nodeName string,
 	nodeIPs map[v1.IPFamily]net.IP,
+	topologyLabels map[string]string,
 	recorder events.EventRecorder,
 	healthzServer *healthcheck.ProxyHealthServer,
 	initOnly bool,
 ) (proxy.Provider, error) {
 	// Create an ipv4 instance of the single-stack proxier
 	ipv4Proxier, err := NewProxier(ctx, config, v1.IPv4Protocol,
-		localDetectors[v1.IPv4Protocol], nodeName, nodeIPs[v1.IPv4Protocol],
+		localDetectors[v1.IPv4Protocol], nodeName, nodeIPs[v1.IPv4Protocol], topologyLabels,
 		recorder, healthzServer, initOnly)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ipv4 proxier: %v", err)
 	}
 
 	ipv6Proxier, err := NewProxier(ctx, config, v1.IPv6Protocol,
-		localDetectors[v1.IPv6Protocol], nodeName, nodeIPs[v1.IPv6Protocol],
+		localDetectors[v1.IPv6Protocol], nodeName, nodeIPs[v1.IPv6Protocol], topologyLabels,
 		recorder, healthzServer, initOnly)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ipv6 proxier: %v", err)
@@ -229,6 +230,7 @@ func NewProxier(ctx context.Context,
 	localDetector proxyutil.LocalTrafficDetector,
 	nodeName string,
 	nodeIP net.IP,
+	topologyLabels map[string]string,
 	recorder events.EventRecorder,
 	healthzServer *healthcheck.ProxyHealthServer,
 	initOnly bool,
@@ -273,6 +275,7 @@ func NewProxier(ctx context.Context,
 		localDetector:            localDetector,
 		nodeName:                 nodeName,
 		nodeIP:                   nodeIP,
+		topologyLabels:           topologyLabels,
 		serviceHealthServer:      serviceHealthServer,
 		healthzServer:            healthzServer,
 		nodePortAddresses:        nodePortAddresses,
@@ -878,16 +881,6 @@ func (proxier *Proxier) OnEndpointSlicesSynced() {
 
 	// Sync unconditionally - this is called once per lifetime.
 	proxier.syncProxyRules()
-}
-
-// OnTopologyChange is called whenever this node's proxy relevant topology-related labels change.
-func (proxier *Proxier) OnTopologyChange(topologyLabels map[string]string) {
-	proxier.mu.Lock()
-	proxier.topologyLabels = topologyLabels
-	proxier.needFullSync = true
-	proxier.mu.Unlock()
-	proxier.logger.V(4).Info("Updated proxier node topology labels", "labels", topologyLabels)
-	proxier.Sync()
 }
 
 // OnServiceCIDRsChanged is called whenever a change is observed

@@ -71,6 +71,15 @@ func tweakResourceVersion(resourceVersion string) nodeTweak {
 	}
 }
 
+func tweakZone(zone string) nodeTweak {
+	return func(n *v1.Node) {
+		if n.Labels == nil {
+			n.Labels = map[string]string{}
+		}
+		n.Labels[v1.LabelTopologyZone] = zone
+	}
+}
+
 func TestNewNodeManager(t *testing.T) {
 	testCases := []struct {
 		name             string
@@ -400,6 +409,58 @@ func TestNodeManagerNode(t *testing.T) {
 	nodeManager.OnNodeChange(makeNode(tweakResourceVersion("2")))
 	require.NoError(t, err)
 	require.Equal(t, "2", nodeManager.Node().ResourceVersion)
+}
+
+func TestNodeManagerTopologyLabels(t *testing.T) {
+	tests := []struct {
+		name     string
+		node     *v1.Node
+		expected map[string]string
+	}{
+		{
+			name:     "node does not exist",
+			expected: map[string]string{},
+		},
+		{
+			name:     "node without zone label",
+			node:     makeNode(tweakNodeIPs("192.168.1.1")),
+			expected: map[string]string{},
+		},
+		{
+			name:     "node with zone label",
+			node:     makeNode(tweakNodeIPs("192.168.1.1"), tweakZone("us-west-2a")),
+			expected: map[string]string{v1.LabelTopologyZone: "us-west-2a"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, ctx := ktesting.NewTestContext(t)
+			var exitCode *int
+			exitFunc := func(code int) {
+				exitCode = &code
+			}
+
+			client := clientsetfake.NewClientset()
+			if tc.node != nil {
+				_, err := client.CoreV1().Nodes().Create(ctx, tc.node, metav1.CreateOptions{})
+				require.NoError(t, err)
+			}
+
+			nodeManager, err := newNodeManager(ctx, client, 30*time.Second, testNodeName, "", false, exitFunc, time.Nanosecond, time.Nanosecond, time.Nanosecond)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, nodeManager.TopologyLabels())
+
+			// Topology labels are immutable once set: a later change must neither
+			// exit nor alter the labels.
+			updated := makeNode(tweakZone("us-east-1b"))
+			if tc.node != nil {
+				updated.Status.Addresses = tc.node.Status.Addresses
+			}
+			nodeManager.OnNodeChange(updated)
+			require.Nil(t, exitCode)
+			require.Equal(t, tc.expected, nodeManager.TopologyLabels())
+		})
+	}
 }
 
 func Test_detectNodeIPs(t *testing.T) {

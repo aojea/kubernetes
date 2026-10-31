@@ -105,10 +105,6 @@ func (r *recordingProxier) OnEndpointSlicesSynced() {
 	r.record("OnEndpointSlicesSynced")
 }
 
-func (r *recordingProxier) OnTopologyChange(labels map[string]string) {
-	r.record("OnTopologyChange")
-}
-
 func (r *recordingProxier) OnServiceCIDRsChanged(cidrs []string) {
 	r.record("OnServiceCIDRsChanged", strings.Join(cidrs, ", "))
 }
@@ -136,7 +132,6 @@ func TestMetaProxier_GenericCallbacksFanOutToBothProxiers(t *testing.T) {
 
 	mp.OnEndpointSlicesSynced()
 
-	mp.OnTopologyChange(map[string]string{"topology.kubernetes.io/zone": "a"})
 	mp.OnServiceCIDRsChanged([]string{"10.0.0.0/16", "2001:db8::/64"})
 
 	want := []string{
@@ -146,7 +141,6 @@ func TestMetaProxier_GenericCallbacksFanOutToBothProxiers(t *testing.T) {
 		"OnServiceDelete(gone)",
 		"OnServiceSynced()",
 		"OnEndpointSlicesSynced()",
-		"OnTopologyChange()",
 		"OnServiceCIDRsChanged(10.0.0.0/16, 2001:db8::/64)",
 	}
 	if diff := cmp.Diff(want, ipv4.getCalls()); diff != "" {

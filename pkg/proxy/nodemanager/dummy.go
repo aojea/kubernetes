@@ -45,6 +45,10 @@ func (n *Dummy) PodCIDRs() []string {
 	return nil
 }
 
+func (n *Dummy) TopologyLabels() map[string]string {
+	return nil
+}
+
 func (n *Dummy) Node() *v1.Node {
 	return nil
 }

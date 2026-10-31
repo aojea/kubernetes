@@ -1081,13 +1081,6 @@ func (proxier *Proxier) OnEndpointSlicesSynced() {
 // in any of the ServiceCIDRs, and provides complete list of service cidrs.
 func (proxier *Proxier) OnServiceCIDRsChanged(_ []string) {}
 
-// TODO(imroc): implement OnTopologyChanged for winkernel proxier.
-// OnTopologyChange is called whenever node topology labels are changed.
-// The informer is tweaked to listen for updates of the node where this
-// instance of kube-proxy is running, this guarantees the changed labels
-// are for this node.
-func (proxier *Proxier) OnTopologyChange(topologyLabels map[string]string) {}
-
 func (proxier *Proxier) cleanupAllPolicies() {
 	for svcName, svc := range proxier.svcPortMap {
 		svcInfo, ok := svc.(*serviceInfo)
